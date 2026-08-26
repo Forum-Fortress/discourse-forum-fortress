@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
-ForumFortressClientSettingsDouble = Struct.new(
+ForumFortressClientSettingsDouble =
+  Struct.new(
     :forum_fortress_enabled,
     :forum_fortress_fail_open,
     :forum_fortress_api_key,
@@ -58,9 +59,7 @@ RSpec.describe ForumFortress::Api::Client do
   end
   let(:transport) { ForumFortressTransportDouble.new }
   let(:logger) { instance_double(Logger, warn: nil) }
-  let(:client) do
-    described_class.new(settings:, transport:, logger:, domain: "community.example")
-  end
+  let(:client) { described_class.new(settings:, transport:, logger:, domain: "community.example") }
 
   it "sends the established common payload to the selected check endpoint" do
     response = client.check("topic", "content" => "hello", "links" => [])
@@ -98,10 +97,7 @@ RSpec.describe ForumFortress::Api::Client do
   it "allows a first bootstrap response a separate bounded provisioning budget" do
     settings.forum_fortress_api_key = ""
     settings.forum_fortress_site_id = ""
-    transport.post_response = {
-      "api_key" => "ff_bootstrapped_key",
-      "site_id" => "site-2",
-    }
+    transport.post_response = { "api_key" => "ff_bootstrapped_key", "site_id" => "site-2" }
 
     client.bootstrap_if_needed
 
@@ -112,10 +108,7 @@ RSpec.describe ForumFortress::Api::Client do
     settings.forum_fortress_api_key = ""
     settings.forum_fortress_site_id = ""
     settings.forum_fortress_bootstrap_token = "ff_bs1_#{"a" * 48}"
-    transport.post_response = {
-      "api_key" => "ff_recovered_key",
-      "site_id" => "site-recovered",
-    }
+    transport.post_response = { "api_key" => "ff_recovered_key", "site_id" => "site-recovered" }
 
     client.bootstrap_if_needed(force: true)
 
@@ -136,10 +129,8 @@ RSpec.describe ForumFortress::Api::Client do
 
   it "raises a safe unavailable error when fail-open is disabled" do
     settings.forum_fortress_fail_open = false
-    transport.post_error = ForumFortress::Api::RequestError.new(
-      "raw payload must not escape",
-      code: "timeout",
-    )
+    transport.post_error =
+      ForumFortress::Api::RequestError.new("raw payload must not escape", code: "timeout")
 
     error = nil
     expect { client.check("reply", "content" => "hello") }.to raise_error(
@@ -166,9 +157,7 @@ RSpec.describe ForumFortress::Api::Client do
   end
 
   it "requests a short-lived portal launch from the control plane" do
-    transport.post_response = {
-      "portal_url" => "https://portal.forumfortress.com/launch/test",
-    }
+    transport.post_response = { "portal_url" => "https://portal.forumfortress.com/launch/test" }
 
     result = client.portal_launch
 
@@ -200,11 +189,8 @@ RSpec.describe ForumFortress::Api::Client do
   end
 
   it "treats an already deleted remote site as a completed deprovision" do
-    transport.post_error = ForumFortress::Api::RequestError.new(
-      "gone",
-      status: 410,
-      code: "site_not_found",
-    )
+    transport.post_error =
+      ForumFortress::Api::RequestError.new("gone", status: 410, code: "site_not_found")
 
     expect(client.deprovision_site).to eq("status" => "already_removed")
   end
@@ -278,11 +264,7 @@ RSpec.describe ForumFortress::Api::Client do
       requests << { base:, path:, payload:, options: }
       case requests.length
       when 1
-        raise ForumFortress::Api::RequestError.new(
-          "invalid",
-          status: 401,
-          code: "invalid_api_key",
-        )
+        raise ForumFortress::Api::RequestError.new("invalid", status: 401, code: "invalid_api_key")
       when 2
         { "api_key" => "ff_recovered", "site_id" => "site-recovered" }
       else
@@ -304,11 +286,7 @@ RSpec.describe ForumFortress::Api::Client do
       requests << { base:, path:, payload:, options: }
       case requests.length
       when 1
-        raise ForumFortress::Api::RequestError.new(
-          "stale",
-          status: 409,
-          code: "stale_site",
-        )
+        raise ForumFortress::Api::RequestError.new("stale", status: 409, code: "stale_site")
       when 2
         { "site_id" => "site-repaired", "api_key" => "ff_test_key" }
       else
@@ -333,7 +311,9 @@ RSpec.describe ForumFortress::Api::Client do
 
   it "applies fail-open behavior when a caller supplies an invalid payload" do
     expect(client.check("reply", nil)).to be_nil
-    expect(logger).to have_received(:warn).with("Forum Fortress check/reply failed (connection_failed)")
+    expect(logger).to have_received(:warn).with(
+      "Forum Fortress check/reply failed (connection_failed)",
+    )
   end
 
   it "uses a valid preferred endpoint first in global mode" do

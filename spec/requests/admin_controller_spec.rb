@@ -27,10 +27,13 @@ RSpec.describe ForumFortress::AdminController do
   end
 
   it "redirects an administrator to a trusted short-lived portal URL" do
-    client = instance_double(
-      ForumFortress::Api::Client,
-      portal_launch: { "portal_url" => "https://portal.forumfortress.com/launch/test" },
-    )
+    client =
+      instance_double(
+        ForumFortress::Api::Client,
+        portal_launch: {
+          "portal_url" => "https://portal.forumfortress.com/launch/test",
+        },
+      )
     allow(ForumFortress::Api::Client).to receive(:new).and_return(client)
 
     get "/forum-fortress/portal.json"
@@ -39,10 +42,13 @@ RSpec.describe ForumFortress::AdminController do
   end
 
   it "refuses a portal redirect outside Forum Fortress hosts" do
-    client = instance_double(
-      ForumFortress::Api::Client,
-      portal_launch: { "portal_url" => "https://attacker.example/launch/test" },
-    )
+    client =
+      instance_double(
+        ForumFortress::Api::Client,
+        portal_launch: {
+          "portal_url" => "https://attacker.example/launch/test",
+        },
+      )
     allow(ForumFortress::Api::Client).to receive(:new).and_return(client)
 
     get "/forum-fortress/portal.json"

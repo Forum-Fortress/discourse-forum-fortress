@@ -28,11 +28,12 @@ module ForumFortress
       args = manager.args
       raw = bounded(args[:raw])
       title = bounded(args[:title])
-      content = if nonblank(args[:topic_id])
-        raw
-      else
-        bounded([title, raw].reject { |value| value.strip.empty? }.join("\n\n"))
-      end
+      content =
+        if nonblank(args[:topic_id])
+          raw
+        else
+          bounded([title, raw].reject { |value| value.strip.empty? }.join("\n\n"))
+        end
 
       user_payload(
         manager.user,
@@ -48,9 +49,10 @@ module ForumFortress
     def post_edit(post, actor: post.user)
       first_post = post.respond_to?(:post_number) && post.post_number.to_i == 1
       title = first_post ? attribute(post.topic, :title).to_s : ""
-      content = bounded(
-        [title, attribute(post, :raw).to_s].reject { |value| value.strip.empty? }.join("\n\n"),
-      )
+      content =
+        bounded(
+          [title, attribute(post, :raw).to_s].reject { |value| value.strip.empty? }.join("\n\n"),
+        )
 
       user_payload(
         actor,
@@ -63,11 +65,13 @@ module ForumFortress
     end
 
     def topic_edit(topic, first_post, actor:)
-      content = bounded(
-        [attribute(topic, :title).to_s, attribute(first_post, :raw).to_s]
-          .reject { |value| value.strip.empty? }
-          .join("\n\n"),
-      )
+      content =
+        bounded(
+          [attribute(topic, :title).to_s, attribute(first_post, :raw).to_s].reject do |value|
+              value.strip.empty?
+            end
+            .join("\n\n"),
+        )
 
       user_payload(
         actor,
@@ -102,9 +106,9 @@ module ForumFortress
         "post_count" => new_record?(user) ? 0 : attribute(user, :post_count).to_i,
       }
 
-      payload.merge(extra).reject do |_key, value|
-        value.nil? || (value.respond_to?(:empty?) && value.empty?)
-      end
+      payload
+        .merge(extra)
+        .reject { |_key, value| value.nil? || (value.respond_to?(:empty?) && value.empty?) }
     end
 
     def profile_fields(user, profile = nil)
@@ -126,18 +130,21 @@ module ForumFortress
 
     def external_links(content)
       seen = {}
-      content.to_s.scan(URL_PATTERN).filter_map do |candidate|
-        value = candidate.sub(/[),.;!?]+\z/, "")
-        uri = URI.parse(value)
-        host = uri.host.to_s.downcase
-        next if host.empty? || forum_host?(host) || uri.userinfo
-        next if seen[value]
+      content
+        .to_s
+        .scan(URL_PATTERN)
+        .filter_map do |candidate|
+          value = candidate.sub(/[),.;!?]+\z/, "")
+          uri = URI.parse(value)
+          host = uri.host.to_s.downcase
+          next if host.empty? || forum_host?(host) || uri.userinfo
+          next if seen[value]
 
-        seen[value] = true
-        value
-      rescue URI::InvalidURIError
-        nil
-      end
+          seen[value] = true
+          value
+        rescue URI::InvalidURIError
+          nil
+        end
     end
 
     private

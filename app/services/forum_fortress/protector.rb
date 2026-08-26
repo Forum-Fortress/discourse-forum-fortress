@@ -30,7 +30,9 @@ module ForumFortress
 
       user = profile.respond_to?(:user) ? profile.user : nil
       actor = profile_actor
-      return if !user || !actor || ignored_user?(user) || ignored_user?(actor) || profile.new_record?
+      if !user || !actor || ignored_user?(user) || ignored_user?(actor) || profile.new_record?
+        return
+      end
       return unless changed?(profile, :bio_raw) || changed?(profile, :website)
 
       fields = {}
@@ -134,17 +136,18 @@ module ForumFortress
       return nil if outcome == :allow
 
       result = NewPostResult.new(:forum_fortress, false)
-      message = if outcome == :block
-        translation(
-          "forum_fortress.errors.blocked",
-          "This submission was blocked by Forum Fortress.",
-        )
-      else
-        translation(
-          "forum_fortress.errors.unavailable",
-          "Forum Fortress is temporarily unavailable. Please try again shortly.",
-        )
-      end
+      message =
+        if outcome == :block
+          translation(
+            "forum_fortress.errors.blocked",
+            "This submission was blocked by Forum Fortress.",
+          )
+        else
+          translation(
+            "forum_fortress.errors.unavailable",
+            "Forum Fortress is temporarily unavailable. Please try again shortly.",
+          )
+        end
       result.errors.add(:base, message)
       result
     end

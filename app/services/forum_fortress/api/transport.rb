@@ -60,10 +60,10 @@ module ForumFortress
               remote_response.read_body do |chunk|
                 if response_body.bytesize + chunk.bytesize > MAX_RESPONSE_BYTES
                   raise RequestError.new(
-                    "response too large",
-                    status: remote_response.code,
-                    code: "response_too_large",
-                  )
+                          "response too large",
+                          status: remote_response.code,
+                          code: "response_too_large",
+                        )
                 end
                 response_body << chunk
               end
@@ -73,10 +73,10 @@ module ForumFortress
 
         unless response.is_a?(Net::HTTPSuccess)
           raise RequestError.new(
-            "remote request rejected",
-            status: response.code,
-            code: response_error_code(response_body),
-          )
+                  "remote request rejected",
+                  status: response.code,
+                  code: response_error_code(response_body),
+                )
         end
 
         return {} if response_body.strip.empty?
@@ -84,10 +84,10 @@ module ForumFortress
         decoded = JSON.parse(response_body)
         unless decoded.is_a?(Hash)
           raise RequestError.new(
-            "invalid response",
-            status: response.code,
-            code: "invalid_response",
-          )
+                  "invalid response",
+                  status: response.code,
+                  code: "invalid_response",
+                )
         end
 
         decoded
@@ -101,11 +101,12 @@ module ForumFortress
 
       def response_error_code(body)
         parsed = JSON.parse(body)
-        value = if parsed.is_a?(Hash)
-          detail = parsed["detail"]
-          detail_error = detail.is_a?(Hash) ? (detail["error"] || detail["code"]) : nil
-          parsed["error"] || detail_error || parsed["code"]
-        end
+        value =
+          if parsed.is_a?(Hash)
+            detail = parsed["detail"]
+            detail_error = detail.is_a?(Hash) ? (detail["error"] || detail["code"]) : nil
+            parsed["error"] || detail_error || parsed["code"]
+          end
         safe_code(value) || "remote_error"
       rescue JSON::ParserError
         "remote_error"

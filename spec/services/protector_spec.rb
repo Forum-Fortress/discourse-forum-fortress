@@ -115,11 +115,7 @@ RSpec.describe ForumFortress::Protector do
   end
 
   it "fails closed when registration payload construction raises and fail-open is disabled" do
-    client =
-      ForumFortressClientDouble.new(
-        { "decision" => "allow" },
-        fail_open: false,
-      )
+    client = ForumFortressClientDouble.new({ "decision" => "allow" }, fail_open: false)
     user = ForumFortressUserDouble.new
     builder = instance_double(ForumFortress::PayloadBuilder)
     allow(builder).to receive(:registration).and_raise(ArgumentError, "bad input")
@@ -131,11 +127,7 @@ RSpec.describe ForumFortress::Protector do
   end
 
   it "does no post work when protection is disabled" do
-    client =
-      ForumFortressClientDouble.new(
-        { "decision" => "allow" },
-        enabled: false,
-      )
+    client = ForumFortressClientDouble.new({ "decision" => "allow" }, enabled: false)
     builder = instance_double(ForumFortress::PayloadBuilder)
     protector = described_class.new(client: client, builder: builder)
     manager = instance_double(NewPostManager)

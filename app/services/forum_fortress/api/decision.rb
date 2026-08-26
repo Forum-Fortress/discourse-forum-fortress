@@ -17,9 +17,7 @@ module ForumFortress
       module_function
 
       def value(response)
-        decision = if response.respond_to?(:[])
-          response["decision"] || response[:decision]
-        end
+        decision = (response["decision"] || response[:decision] if response.respond_to?(:[]))
 
         decision = decision.to_s.strip.downcase
         if VALID.exclude?(decision)

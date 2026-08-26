@@ -2,17 +2,19 @@
 
 RSpec.describe ForumFortress::Uninstaller do
   let(:settings) do
-    Class.new do
-      attr_reader :removed
+    Class
+      .new do
+        attr_reader :removed
 
-      def initialize
-        @removed = []
-      end
+        def initialize
+          @removed = []
+        end
 
-      def remove_override!(name)
-        @removed << name
+        def remove_override!(name)
+          @removed << name
+        end
       end
-    end.new
+      .new
   end
   let(:client) { instance_double(ForumFortress::Api::Client) }
   let(:uninstaller) { described_class.new(settings:, client:) }

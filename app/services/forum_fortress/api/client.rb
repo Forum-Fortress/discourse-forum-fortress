@@ -94,9 +94,7 @@ module ForumFortress
         rescue RequestError => error
           if !rebootstrap_attempted && stale_identity_error?(error)
             rebootstrap_attempted = true
-            best_effort_state_update("clear_stale_identity") do
-              prepare_identity_recovery(error)
-            end
+            best_effort_state_update("clear_stale_identity") { prepare_identity_recovery(error) }
             bootstrap_if_needed(force: true)
             retry
           end
@@ -131,25 +129,26 @@ module ForumFortress
           break if remaining <= 0
 
           begin
-            response = @transport.post_json(
-              base,
-              "/v1/site/bootstrap",
-              payload,
-              timeout: [BOOTSTRAP_ENDPOINT_TIMEOUT_SECONDS, remaining].min,
-            )
+            response =
+              @transport.post_json(
+                base,
+                "/v1/site/bootstrap",
+                payload,
+                timeout: [BOOTSTRAP_ENDPOINT_TIMEOUT_SECONDS, remaining].min,
+              )
             if response["api_key"].to_s.strip.empty?
               raise RequestError.new(
-                "bootstrap did not return an API key",
-                code: "bootstrap_missing_key",
-              )
+                      "bootstrap did not return an API key",
+                      code: "bootstrap_missing_key",
+                    )
             end
 
             persist_identity(response, endpoint: base)
             if api_key.empty?
               raise RequestError.new(
-                "bootstrap identity could not be stored",
-                code: "bootstrap_identity_not_stored",
-              )
+                      "bootstrap identity could not be stored",
+                      code: "bootstrap_identity_not_stored",
+                    )
             end
             best_effort_state_update("clear_bootstrap_token") do
               write_if_changed(:forum_fortress_bootstrap_token, "")
@@ -227,13 +226,18 @@ module ForumFortress
           end
         end
 
-        status = @transport.get_json(
-          CONTROL_BASE_URL,
-          "/v1/site/status",
-          query: { domain: domain },
-          headers: { "X-FF-Key" => api_key },
-          timeout: [timeout_budget, 2].min,
-        )
+        status =
+          @transport.get_json(
+            CONTROL_BASE_URL,
+            "/v1/site/status",
+            query: {
+              domain: domain,
+            },
+            headers: {
+              "X-FF-Key" => api_key,
+            },
+            timeout: [timeout_budget, 2].min,
+          )
         unless status["site_id"].to_s.strip.length.positive?
           raise RequestError.new("invalid site status", code: "invalid_site_status")
         end
@@ -263,27 +267,24 @@ module ForumFortress
       end
 
       def portal_launch
-        unless enabled?
-          raise Unavailable, "Forum Fortress is disabled"
-        end
+        raise Unavailable, "Forum Fortress is disabled" unless enabled?
 
         rebootstrap_attempted = false
         begin
           bootstrap_if_needed
-          response = @transport.post_json(
-            CONTROL_BASE_URL,
-            "/v1/site/portal",
-            common_payload,
-            timeout: [timeout_budget, 3].min,
-          )
+          response =
+            @transport.post_json(
+              CONTROL_BASE_URL,
+              "/v1/site/portal",
+              common_payload,
+              timeout: [timeout_budget, 3].min,
+            )
           best_effort_state_update("clear_error") { clear_error }
           response
         rescue RequestError => error
           if !rebootstrap_attempted && stale_identity_error?(error)
             rebootstrap_attempted = true
-            best_effort_state_update("clear_stale_identity") do
-              prepare_identity_recovery(error)
-            end
+            best_effort_state_update("clear_stale_identity") { prepare_identity_recovery(error) }
             bootstrap_if_needed(force: true)
             retry
           end
@@ -343,7 +344,7 @@ module ForumFortress
                 request_payload,
                 timeout: [CHECK_ENDPOINT_TIMEOUT_SECONDS, remaining].min,
               ),
-              base,
+              base
             ]
           rescue StandardError => error
             last_error = error
