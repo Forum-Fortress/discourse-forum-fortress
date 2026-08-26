@@ -1,0 +1,43 @@
+forum_fortress:
+  forum_fortress_enabled:
+    default: false
+    client: true
+  forum_fortress_api_key:
+    default: ""
+    client: false
+    secret: true
+  forum_fortress_bootstrap_token:
+    default: ""
+    client: false
+  forum_fortress_site_id:
+    default: ""
+    client: false
+    hidden: true
+  forum_fortress_api_region:
+    default: global
+    type: enum
+    choices:
+      - global
+      - uk
+      - eu
+      - us
+    client: true
+  forum_fortress_allow_global_fallback:
+    default: false
+    client: true
+  forum_fortress_timeout:
+    default: 5
+    min: 1
+    max: 30
+    client: true
+  forum_fortress_fail_open:
+    default: true
+    client: true
+  forum_fortress_preferred_endpoint:
+    default: ""
+    client: false
+    hidden: true
+  forum_fortress_endpoint_state:
+    default: "{}"
+    client: false
+    hidden: true

@@ -1,0 +1,18 @@
+en:
+  site_settings:
+    forum_fortress_enabled: "Enable Forum Fortress protection for registrations, public posts, post edits, and supported profile changes."
+    forum_fortress_api_key: "Forum Fortress API key. Leave blank to allow the plugin to bootstrap a site connection on its first check."
+    forum_fortress_bootstrap_token: "Optional short-lived bootstrap token for connecting an existing Forum Fortress site. It is cleared after a successful bootstrap."
+    forum_fortress_site_id: "Forum Fortress site identifier (managed automatically)."
+    forum_fortress_api_region: "Forum Fortress check region."
+    forum_fortress_allow_global_fallback: "Allow Forum Fortress checks to fall back to the global API endpoint when the selected region is unavailable."
+    forum_fortress_timeout: "Maximum total time in seconds to spend trying Forum Fortress check endpoints. Individual attempts remain bounded."
+    forum_fortress_fail_open: "Allow registrations and public posts when Forum Fortress cannot be reached."
+    forum_fortress_preferred_endpoint: "Forum Fortress preferred endpoint (managed automatically)."
+    forum_fortress_endpoint_state: "Forum Fortress endpoint state (managed automatically)."
+
+  forum_fortress:
+    errors:
+      blocked: "Forum Fortress could not accept this submission. Please review it and try again."
+      unavailable: "Forum Fortress is temporarily unavailable. Please try again shortly."
+      portal_unavailable: "Forum Fortress could not open the portal. Check the site connection and try again."
