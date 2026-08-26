@@ -1,5 +1,7 @@
 # Forum Fortress for Discourse
 
+[![Discourse Plugin CI](https://github.com/Forum-Fortress/discourse/actions/workflows/discourse-plugin.yml/badge.svg)](https://github.com/Forum-Fortress/discourse/actions/workflows/discourse-plugin.yml)
+
 Forum Fortress is a native Discourse plugin that checks selected user-generated activity against the Forum Fortress anti-spam service. This repository contains the first Discourse implementation and is intended to be installed as a normal Discourse plugin.
 
 > **Release status:** `0.1.0-alpha.1` is the first public alpha. Install it on a current, backed-up Discourse site and validate the protected flows before relying on it in production.
