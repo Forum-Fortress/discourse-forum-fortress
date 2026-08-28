@@ -10,7 +10,7 @@ module ForumFortress
   module Api
     class Transport
       MAX_RESPONSE_BYTES = 1_000_000
-      USER_AGENT = "ForumFortress-Discourse/0.1.0-alpha.1"
+      USER_AGENT = "ForumFortress-Discourse/0.1.0-alpha.2"
 
       def get_json(base, path, query: {}, headers: {}, timeout:)
         request(base, path, method: :get, query:, headers:, timeout:)

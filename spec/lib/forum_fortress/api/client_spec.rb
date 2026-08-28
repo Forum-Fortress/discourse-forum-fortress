@@ -73,7 +73,7 @@ RSpec.describe ForumFortress::Api::Client do
       "site_id" => "site-1",
       "domain" => "community.example",
       "platform" => "discourse",
-      "plugin_version" => "0.1.0-alpha.1",
+      "plugin_version" => "0.1.0-alpha.2",
       "content" => "hello",
     )
   end
@@ -102,6 +102,37 @@ RSpec.describe ForumFortress::Api::Client do
     client.bootstrap_if_needed
 
     expect(transport.requests.first.dig(:options, :timeout)).to be > 29
+  end
+
+  it "repairs a key-only identity from authenticated site status before checking" do
+    settings.forum_fortress_site_id = ""
+    transport.get_response = { "site_id" => "site-repaired", "status" => "ok" }
+
+    expect(client.check("reply", "content" => "hello")["decision"]).to eq("allow")
+
+    expect(transport.requests.first[:path]).to eq("/v1/site/status")
+    expect(transport.requests.last[:payload]).to include("site_id" => "site-repaired")
+    expect(settings.forum_fortress_site_id).to eq("site-repaired")
+  end
+
+  it "retries a lost bootstrap response and confirms the identity with a heartbeat" do
+    settings.forum_fortress_api_key = ""
+    settings.forum_fortress_site_id = ""
+    transport.define_singleton_method(:post_json) do |base, path, payload, **options|
+      @requests << { method: :post, base:, path:, payload:, options: }
+      if path == "/v1/site/bootstrap"
+        { "api_key" => "ff_replayed_key", "site_id" => "site-replayed" }
+      else
+        { "status" => "ok", "site_id" => "site-replayed" }
+      end
+    end
+
+    expect(client.heartbeat).to include("status" => "ok")
+    expect(transport.requests.map { |request| request[:path] }).to eq(
+      ["/v1/site/bootstrap", "/v1/site/ping"],
+    )
+    expect(settings.forum_fortress_api_key).to eq("ff_replayed_key")
+    expect(settings.forum_fortress_site_id).to eq("site-replayed")
   end
 
   it "uses and clears a short-lived bootstrap token for an existing site" do
@@ -278,6 +309,24 @@ RSpec.describe ForumFortress::Api::Client do
     expect(bootstrap_request[:path]).to eq("/v1/site/bootstrap")
     expect(bootstrap_request[:payload]).not_to include("api_key")
     expect(settings.forum_fortress_api_key).to eq("ff_recovered")
+  end
+
+  it "restores the previous identity when automatic recovery is interrupted" do
+    transport.define_singleton_method(:post_json) do |base, path, payload, **options|
+      @requests << { method: :post, base:, path:, payload:, options: }
+      if path.start_with?("/v1/check/")
+        raise ForumFortress::Api::RequestError.new(
+                "invalid",
+                status: 401,
+                code: "invalid_api_key",
+              )
+      end
+      raise ForumFortress::Api::RequestError.new("timeout", code: "timeout")
+    end
+
+    expect(client.check("reply", "content" => "hello")).to be_nil
+    expect(settings.forum_fortress_api_key).to eq("ff_test_key")
+    expect(settings.forum_fortress_site_id).to eq("site-1")
   end
 
   it "keeps a valid key while repairing only a stale site identifier" do

@@ -16,7 +16,7 @@ module ForumFortress
     end
 
     class Client
-      PLUGIN_VERSION = "0.1.0-alpha.1"
+      PLUGIN_VERSION = "0.1.0-alpha.2"
       PLATFORM = "discourse"
       CONTROL_BASE_URL = "https://fortress.ffapi.net"
       API_BASE_URLS = {
@@ -26,11 +26,9 @@ module ForumFortress
         "us" => "https://api-us.ffapi.net",
       }.freeze
       CHECK_ENDPOINT_TIMEOUT_SECONDS = 1
-      # The generic bootstrap endpoint cannot replay a key after a lost first
-      # response. Give its authoritative control-plane attempt enough time to
-      # complete an edge-to-control provisioning round trip instead of risking
-      # an orphaned identity after a short read timeout. This applies only to
-      # bootstrap; normal checks retain their short configured timeout.
+      # Bootstrap is idempotent until this client confirms the returned key on
+      # an authenticated request. Keep a separate provisioning budget while
+      # ordinary anti-spam checks retain their short configured timeout.
       BOOTSTRAP_TOTAL_TIMEOUT_SECONDS = 30
       BOOTSTRAP_ENDPOINT_TIMEOUT_SECONDS = 30
       MIN_TIMEOUT_SECONDS = 1
@@ -94,8 +92,11 @@ module ForumFortress
         rescue RequestError => error
           if !rebootstrap_attempted && stale_identity_error?(error)
             rebootstrap_attempted = true
-            best_effort_state_update("clear_stale_identity") { prepare_identity_recovery(error) }
-            bootstrap_if_needed(force: true)
+            begin
+              recover_identity(error)
+            rescue StandardError => recovery_error
+              return handle_failure("check/#{event_type}", recovery_error)
+            end
             retry
           end
 
@@ -107,7 +108,10 @@ module ForumFortress
 
       def bootstrap_if_needed(force: false)
         return nil unless enabled?
-        return nil if !force && !api_key.empty?
+        if !force && !api_key.empty?
+          site_status if site_id.empty?
+          return nil
+        end
 
         state = endpoint_state
         last_failure = state["last_bootstrap_failure_at"].to_i
@@ -171,6 +175,74 @@ module ForumFortress
         )
       end
 
+      def site_status
+        return nil unless enabled?
+        return nil if api_key.empty?
+
+        status =
+          @transport.get_json(
+            CONTROL_BASE_URL,
+            "/v1/site/status",
+            query: {
+              domain: domain,
+            },
+            headers: {
+              "X-FF-Key" => api_key,
+            },
+            timeout: [timeout_budget, 2].min,
+          )
+        if status["site_id"].to_s.strip.empty?
+          raise RequestError.new("invalid site status", code: "invalid_site_status")
+        end
+
+        persist_identity(status)
+        status
+      end
+
+      # Scheduled independently of protected traffic so a quiet forum can
+      # recover a lost bootstrap response and complete the two-way handshake.
+      # Background failures are recorded but never affect forum availability.
+      def heartbeat
+        return nil unless enabled?
+
+        rebootstrap_attempted = false
+        begin
+          bootstrap_if_needed
+          return nil if api_key.empty? || site_id.empty?
+
+          response =
+            @transport.post_json(
+              CONTROL_BASE_URL,
+              "/v1/site/ping",
+              common_payload,
+              timeout: [timeout_budget, 3].min,
+            )
+          best_effort_state_update("heartbeat_identity") { persist_identity(response) }
+          best_effort_state_update("heartbeat_success") do
+            state = endpoint_state
+            state["last_site_ping_at"] = now
+            state.delete("last_error_code")
+            state.delete("last_error_at")
+            save_endpoint_state(state)
+          end
+          response
+        rescue RequestError => error
+          if !rebootstrap_attempted && stale_identity_error?(error)
+            rebootstrap_attempted = true
+            begin
+              recover_identity(error)
+            rescue StandardError => recovery_error
+              return handle_background_failure("site/ping", recovery_error)
+            end
+            retry
+          end
+
+          handle_background_failure("site/ping", error)
+        rescue StandardError => error
+          handle_background_failure("site/ping", error)
+        end
+      end
+
       def status_summary
         {
           enabled: enabled?,
@@ -226,21 +298,7 @@ module ForumFortress
           end
         end
 
-        status =
-          @transport.get_json(
-            CONTROL_BASE_URL,
-            "/v1/site/status",
-            query: {
-              domain: domain,
-            },
-            headers: {
-              "X-FF-Key" => api_key,
-            },
-            timeout: [timeout_budget, 2].min,
-          )
-        unless status["site_id"].to_s.strip.length.positive?
-          raise RequestError.new("invalid site status", code: "invalid_site_status")
-        end
+        status = site_status
 
         best_effort_state_update("connection_identity") do
           persist_identity(status, endpoint: health_endpoint)
@@ -284,8 +342,11 @@ module ForumFortress
         rescue RequestError => error
           if !rebootstrap_attempted && stale_identity_error?(error)
             rebootstrap_attempted = true
-            best_effort_state_update("clear_stale_identity") { prepare_identity_recovery(error) }
-            bootstrap_if_needed(force: true)
+            begin
+              recover_identity(error)
+            rescue StandardError => recovery_error
+              raise_portal_unavailable(recovery_error)
+            end
             retry
           end
 
@@ -402,8 +463,44 @@ module ForumFortress
       end
 
       def stale_identity_error?(error)
-        stale_codes = %w[invalid_key invalid_api_key node_mismatch stale_site site_not_found]
+        stale_codes = %w[
+          invalid_key
+          invalid_api_key
+          invalid_key_format
+          node_mismatch
+          stale_site
+          site_not_found
+          unknown_site
+        ]
         error.status.to_i == 401 || stale_codes.include?(error.code)
+      end
+
+      def identity_snapshot
+        {
+          api_key: api_key,
+          site_id: site_id,
+          preferred_endpoint: read(:forum_fortress_preferred_endpoint, "").to_s,
+        }
+      end
+
+      def restore_identity(snapshot)
+        write_if_changed(:forum_fortress_api_key, snapshot[:api_key])
+        write_if_changed(:forum_fortress_site_id, snapshot[:site_id])
+        write_if_changed(
+          :forum_fortress_preferred_endpoint,
+          snapshot[:preferred_endpoint],
+        )
+      end
+
+      def recover_identity(error)
+        snapshot = identity_snapshot
+        begin
+          prepare_identity_recovery(error)
+          bootstrap_if_needed(force: true)
+        rescue StandardError
+          best_effort_state_update("restore_stale_identity") { restore_identity(snapshot) }
+          raise
+        end
       end
 
       def clear_site_identity
@@ -451,6 +548,12 @@ module ForumFortress
         return nil if fail_open?
 
         raise Unavailable.new(cause: error)
+      end
+
+      def handle_background_failure(operation, error)
+        best_effort_state_update("background_failure_state") { remember_error(error) }
+        log_failure(operation, error)
+        nil
       end
 
       def remember_error(error)

@@ -9,7 +9,7 @@ RSpec.describe ForumFortress::Api::Transport do
         headers: {
           "Accept" => "application/json",
           "Content-Type" => "application/json",
-          "User-Agent" => "ForumFortress-Discourse/0.1.0-alpha.1",
+          "User-Agent" => "ForumFortress-Discourse/0.1.0-alpha.2",
         },
         body: '{"content":"hello"}',
       ).to_return(status: 200, body: '{"decision":"allow"}')

@@ -4,7 +4,7 @@
 
 Forum Fortress is a native Discourse plugin that checks selected user-generated activity against the Forum Fortress anti-spam service. This repository contains the first Discourse implementation and is intended to be installed as a normal Discourse plugin.
 
-> **Release status:** `0.1.0-alpha.1` is the first public alpha. Install it on a current, backed-up Discourse site and validate the protected flows before relying on it in production.
+> **Release status:** `0.1.0-alpha.2` is a public alpha. Install it on a current, backed-up Discourse site and validate the protected flows before relying on it in production.
 
 ## Current coverage
 
@@ -87,7 +87,7 @@ The site ID, preferred endpoint, and endpoint state are hidden server-side setti
 
 The plugin uses the established Forum Fortress contract: `/v1/site/bootstrap`, the `register`, `topic`, `reply`, `topic_edit`, `reply_edit`, and `profile_edit` check routes, and `/v1/site/status`, with the existing `allow`/`review`/`block` decision semantics. As in the established integrations, `review` is accepted by the synchronous gate. The plugin does not create local scoring, confidence thresholds, or shadow decisions. A stable per-check request ID is reused across endpoint retries so Forum Fortress can deduplicate one logical check.
 
-Checks are synchronous where Discourse needs a decision before saving a registration or public post. Ordinary checks use the configured bounded timeout and regional candidates. First-time bootstrap has a separate 30-second bound so edge-to-control provisioning can complete without lengthening normal posting requests. With fail-open enabled, network, timeout, malformed-response, and service errors allow the Discourse action to continue; the error is reduced to a sanitized code in hidden state and a generic application log entry. With fail-open disabled, the action receives a localized temporary-unavailable validation error.
+Checks are synchronous where Discourse needs a decision before saving a registration or public post. Ordinary checks use the configured bounded timeout and regional candidates. First-time bootstrap has a separate 30-second bound so edge-to-control provisioning can complete without lengthening normal posting requests. A ten-minute background heartbeat retries incomplete bootstrap state and confirms stored credentials, so a quiet forum can self-heal without an administrator visit. With fail-open enabled, network, timeout, malformed-response, and service errors allow the Discourse action to continue; the error is reduced to a sanitized code in hidden state and a generic application log entry. With fail-open disabled, the action receives a localized temporary-unavailable validation error.
 
 ## Privacy and data handling
 
