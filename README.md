@@ -4,17 +4,19 @@
 
 Forum Fortress is a native Discourse plugin that checks selected user-generated activity against the Forum Fortress anti-spam service. This repository contains the first Discourse implementation and is intended to be installed as a normal Discourse plugin.
 
-> **Release status:** `0.1.0-alpha.2` is a public alpha. Install it on a current, backed-up Discourse site and validate the protected flows before relying on it in production.
+> **Release status:** `0.1.0-alpha.3` is the next alpha candidate. It is not public until the source/tag parity and release checks pass. Install it on a current, backed-up Discourse site and validate the protected flows before relying on it in production.
 
 ## Current coverage
 
-- New account registration, before the `User` record is accepted.
-- New public topics and replies, before `NewPostManager` creates the post.
-- Public reply edits and first-post body/title edits, before the revision transaction commits.
-- Username/name changes and the supported profile fields `bio_raw` and `website`.
+- New account registration, including the identity data described below, before the `User` record is accepted.
+- New topics and replies in categories without read restrictions, before `NewPostManager` creates the post.
+- Reply edits and first-post body/title edits in categories without read restrictions, before the revision transaction commits.
+- Username/name changes and the supported profile fields `bio_raw` and `website`; these checks include account identity data as well as the fields changed in that submission.
 - A native Forum Fortress dashboard showing enablement, local configuration, protection coverage, failure mode, an explicit connection test, and admin-only portal login.
 
-Private messages are not sent to Forum Fortress. Staff, system, bot, and staged-user activity is skipped deliberately. Discourse has no direct equivalent of the Flarum signature field, so signature checks are not claimed here.
+Private messages and content in access-restricted categories are not sent to Forum Fortress. For a category-and-content edit, the check is skipped if either the current category or intended destination is restricted. If the plugin cannot establish the effective category safely, it skips the external content check without rejecting the Discourse action. Category-only moves do not create a content check.
+
+Here, “without read restrictions” describes the category’s Discourse access setting; it does not claim that anonymous visitors can read the content. An otherwise unrestricted category on a site with `login_required` enabled is still eligible for checks. Staff, system, bot, and staged-user activity is skipped deliberately. Discourse has no direct equivalent of the Flarum signature field, so signature checks are not claimed here.
 
 ## Requirements
 
@@ -81,51 +83,23 @@ After installation, open **Admin → Plugins → Forum Fortress → Dashboard**,
 5. Use **Test connection** to verify the health endpoint and the site status response.
 6. Use **Open Forum Fortress portal** for an admin-only, short-lived portal login. Discourse requests the launch URL server-side and only redirects to validated Forum Fortress HTTPS hosts.
 
-The site ID, preferred endpoint, and endpoint state are hidden server-side settings maintained by the plugin. No API key is serialized to browser settings or exposed to frontend JavaScript.
+The site ID and endpoint state are hidden server-side settings maintained by the plugin. The legacy preferred-endpoint setting is retained only for offline issuer pinning; normal requests always start at the selected GeoDNS hostname. No API key is serialized to browser settings or exposed to frontend JavaScript.
 
 ## API and failure behaviour
 
-The plugin uses the established Forum Fortress contract: `/v1/site/bootstrap`, the `register`, `topic`, `reply`, `topic_edit`, `reply_edit`, and `profile_edit` check routes, and `/v1/site/status`, with the existing `allow`/`review`/`block` decision semantics. As in the established integrations, `review` is accepted by the synchronous gate. The plugin does not create local scoring, confidence thresholds, or shadow decisions. A stable per-check request ID is reused across endpoint retries so Forum Fortress can deduplicate one logical check.
+The plugin uses the established Forum Fortress contract: `/v1/site/bootstrap`, the `register`, `topic`, `reply`, `topic_edit`, `reply_edit`, and `profile_edit` check routes, and `/v1/site/status`. `allow` continues the Discourse action, `block` adds a validation error, and the recognised legacy `review` decision is allowed through this synchronous gate. The plugin does not put `review` decisions into Discourse’s native review queue and does not synchronize either moderation system. Unknown decisions are treated as service failures. The plugin does not create local scoring, confidence thresholds, or shadow decisions. A stable per-check request ID is reused across endpoint retries so Forum Fortress can deduplicate one logical check.
 
-Checks are synchronous where Discourse needs a decision before saving a registration or public post. Ordinary checks use the configured bounded timeout and regional candidates. First-time bootstrap has a separate 30-second bound so edge-to-control provisioning can complete without lengthening normal posting requests. A ten-minute background heartbeat retries incomplete bootstrap state and confirms stored credentials, so a quiet forum can self-heal without an administrator visit. With fail-open enabled, network, timeout, malformed-response, and service errors allow the Discourse action to continue; the error is reduced to a sanitized code in hidden state and a generic application log entry. With fail-open disabled, the action receives a localized temporary-unavailable validation error.
+Protected actions wait synchronously for a decision before their Discourse save can complete; checks are not asynchronous or zero-latency. The normal total timeout is configurable from 1 to 30 seconds and defaults to 5 seconds. Each regional check attempt is capped at 1 second within that total budget. First-time bootstrap has a separate 30-second total bound so edge-to-control provisioning can complete without lengthening normal posting requests. A ten-minute background heartbeat retries incomplete bootstrap state and confirms stored credentials, so a quiet forum can self-heal without an administrator visit. With fail-open enabled by default, network, timeout, malformed-response, and service errors allow the Discourse action to continue; the error is reduced to a sanitized code in hidden state and a generic application log entry. With fail-open disabled, the action receives a localized temporary-unavailable validation error.
 
 ## Privacy and data handling
 
-Only fields already used by the Forum Fortress forum integrations are sent: the site domain and platform metadata; registration/profile identity fields; account age and post count; request IP and user agent for new posts when Discourse supplies them; public post content; and external links extracted from that content. Profile edits include only the supported fields changed in that submission. Private-message content, arbitrary Discourse metadata, and rendered profile HTML are not sent.
+Only fields already used by the Forum Fortress forum integrations are sent: the site domain and platform metadata; registration/profile identity fields (including username and email); account age and post count; request IP and user agent for new posts when Discourse supplies them; eligible submitted post content; and external links extracted from that content. Registration can include display name, bio, website, registration IP and email before the account is accepted. Profile checks include the account identity fields plus only the supported profile fields changed in that submission. Private-message content, content in access-restricted categories, arbitrary Discourse metadata, and rendered profile HTML are not sent.
 
-The plugin does not add application-log entries containing raw emails, IP addresses, user agents, post bodies, links, or API keys. The API key uses Discourse's ordinary server-only secret site-setting mechanism. Administrators should review their Forum Fortress account’s retention and privacy settings separately.
+The plugin does not add application-log entries containing raw emails, IP addresses, user agents, post bodies, links, or API keys. The API key uses Discourse's ordinary server-only secret site-setting mechanism. Forum Fortress is an external service dependency; administrators should review [Privacy and network access](https://forumfortress.com/docs/privacy-network/) and the [Privacy Policy](https://forumfortress.com/privacy/) before enabling it.
 
 ## Updating and compatibility
 
-Back up the site and run `./launcher rebuild app`; the normal rebuild process fetches the current plugin source. Update the plugin together with the Discourse version it targets, then re-run the admin connection test. This alpha targets current Discourse APIs and does not promise compatibility with older releases. Review `IMPLEMENTATION_NOTES.md` before upgrading across a major Discourse change.
-
-## Development and testing
-
-From the Discourse checkout with this plugin linked into `plugins/`:
-
-```sh
-bundle exec rake "plugin:spec[discourse-forum-fortress]"
-bundle exec rake "plugin:qunit[discourse-forum-fortress]"
-```
-
-The RSpec suite uses fake settings and transport objects for the API client and decision mapping, plus focused protection and payload tests. The QUnit suite covers the current admin-plugin route and dashboard interaction. When Chromium runs inside a restricted container, set `DISCOURSE_DISABLE_BROWSER_SANDBOX=1` for the QUnit command. Run the suites through Discourse’s Docker development container for the real Rails environment:
-
-```sh
-cd /path/to/discourse
-ln -s /path/to/discourse-forum-fortress plugins/discourse-forum-fortress
-d/boot_dev --init
-d/mailhog
-d/rails s
-```
-
-In a second terminal, start the current Ember development bundle:
-
-```sh
-cd /path/to/discourse
-d/dev --only ember
-```
-
-The official development scripts bind the web app to `127.0.0.1:3000` and the local MailHog/Mailpit-compatible inbox to `127.0.0.1:8025`; do not pass `--net-public` when testing locally. The SMTP sink listens on port `1025`, so no public web server, DNS name, or email provider is required. Open `http://127.0.0.1:3000` and `http://127.0.0.1:8025` to inspect the installation. Run `d/rspec plugins/discourse-forum-fortress/spec` or `d/rake plugin:spec[discourse-forum-fortress]` for the plugin suite, and stop the container with `d/shutdown_dev` when finished. Real Forum Fortress connection tests still require outbound HTTPS access to the configured Forum Fortress API; the automated suite remains offline and uses test doubles.
+Back up the site and run `./launcher rebuild app`; the normal rebuild process fetches the current plugin source. Update the plugin together with the Discourse version it targets, then re-run the admin connection test. The declared minimum is Discourse `2026.8.0`. The backend suite is tested against the official `v2026.8.0` and `v2026.9.0-latest` tags; older releases are not claimed. Review the changelog and release notes before upgrading across a major Discourse change.
 
 ## Known first-release limitations
 
@@ -134,3 +108,19 @@ The official development scripts bind the web app to `127.0.0.1:3000` and the lo
 - OAuth/SSO and unusual import/API creation paths should be exercised on the eventual test instance.
 - Out-of-band model saves with no explicit acting user are deliberately skipped. Queued-post approval and non-standard plugins that bypass `NewPostManager` or `PostRevisor` need integration validation.
 - The local Docker workflow validates current core boot, route discovery, plugin loading, the Ember bundle, the dashboard route/rendering, the admin status request, connection-test presentation, and the plugin RSpec suite. A signed-in visual pass and live portal handoff should still be repeated after each deployment.
+
+## License
+
+The Forum Fortress plugin is free and open-source software licensed under the
+GNU General Public License, version 2 or later (`GPL-2.0-or-later`). See
+`LICENSE` for the complete licence and `NOTICE` for the copyright, service and
+trademark boundary.
+
+The Forum Fortress hosted service is separate and is governed by its service
+terms. The plugin licence does not provide a subscription, credentials, access
+to private backend code, or permission to imply that a fork is an official
+Forum Fortress release.
+
+Contributions are submitted under `GPL-2.0-or-later`; contributors retain their
+copyright. This project does not require a contributor licence agreement or
+copyright assignment. See `CONTRIBUTING.md`.

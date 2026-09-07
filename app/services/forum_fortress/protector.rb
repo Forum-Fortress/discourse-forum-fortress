@@ -2,9 +2,10 @@
 
 module ForumFortress
   class Protector
-    def initialize(client: nil, builder: nil)
+    def initialize(client: nil, builder: nil, eligibility: nil)
       @client = client || Api::Client.new
       @builder = builder || PayloadBuilder.new(domain: @client.domain)
+      @eligibility = eligibility || ContentEligibility.new
     end
 
     def validate_user(user)
@@ -46,10 +47,11 @@ module ForumFortress
 
       user = manager.user
       args = manager.args
-      return if ignored_user?(user) || private_message_args?(args)
+      return if ignored_user?(user)
 
       raw = args[:raw].to_s.strip
       return if raw.empty?
+      return unless @eligibility.new_post?(manager)
 
       event = nonblank?(args[:topic_id]) ? "reply" : "topic"
       outcome = outcome_for(event) { @builder.new_post(manager) }
@@ -63,9 +65,9 @@ module ForumFortress
 
       actor = acting_user(post)
       return if !actor || ignored_user?(actor) || !post.persisted?
-      return if post.respond_to?(:topic) && post.topic&.private_message?
       return unless changed?(post, :raw)
       return if first_post_title_edit_in_progress?(post)
+      return unless eligible_edit?(post.topic, post_id: post.id)
 
       event = post.post_number.to_i == 1 ? "topic_edit" : "reply_edit"
       outcome = outcome_for(event) { @builder.post_edit(post, actor:) }
@@ -77,11 +79,11 @@ module ForumFortress
 
       actor = acting_user(topic)
       return if !actor || ignored_user?(actor) || !topic.persisted?
-      return if topic.respond_to?(:private_message?) && topic.private_message?
       return unless changed?(topic, :title)
 
       first_post = topic.posts.find_by(post_number: 1)
       return unless first_post
+      return unless eligible_edit?(topic, post_id: first_post.id)
 
       outcome = outcome_for("topic_edit") { @builder.topic_edit(topic, first_post, actor:) }
       add_error(topic, outcome)
@@ -162,13 +164,6 @@ module ForumFortress
       false
     end
 
-    def private_message_args?(args)
-      return true if args[:archetype].to_s == Archetype.private_message.to_s
-      return false unless nonblank?(args[:topic_id])
-
-      Topic.where(id: args[:topic_id], archetype: Archetype.private_message).exists?
-    end
-
     def protection_enabled?
       !@client.respond_to?(:enabled?) || @client.enabled?
     rescue StandardError
@@ -198,6 +193,27 @@ module ForumFortress
 
       context = RequestStore.store[ForumFortress::PostRevisorExtension::REVISION_CONTEXT_KEY]
       context.is_a?(Hash) && context[:post_id].to_i == post.id.to_i && context[:title_changed]
+    end
+
+    def eligible_edit?(topic, post_id:)
+      context = revision_context(post_id)
+      return @eligibility.edit?(topic) unless context
+
+      @eligibility.edit?(
+        topic,
+        current_category_id: context[:current_category_id],
+        intended_category_id: context[:intended_category_id],
+        category_change: context[:category_changed],
+      )
+    end
+
+    def revision_context(post_id)
+      return nil unless defined?(RequestStore)
+
+      context = RequestStore.store[ForumFortress::PostRevisorExtension::REVISION_CONTEXT_KEY]
+      return nil unless context.is_a?(Hash) && context[:post_id].to_i == post_id.to_i
+
+      context
     end
 
     def changed?(record, attribute)

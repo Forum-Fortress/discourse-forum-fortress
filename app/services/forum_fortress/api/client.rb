@@ -16,7 +16,7 @@ module ForumFortress
     end
 
     class Client
-      PLUGIN_VERSION = "0.1.0-alpha.2"
+      PLUGIN_VERSION = "0.1.0-alpha.3"
       PLATFORM = "discourse"
       CONTROL_BASE_URL = "https://fortress.ffapi.net"
       API_BASE_URLS = {
@@ -253,7 +253,7 @@ module ForumFortress
           global_fallback: global_fallback?,
           fail_open: fail_open?,
           timeout: timeout_budget,
-          preferred_endpoint: safe_endpoint(read(:forum_fortress_preferred_endpoint, "")),
+          preferred_endpoint: API_BASE_URLS.fetch(region, API_BASE_URLS["global"]),
           last_error_code: endpoint_state["last_error_code"],
           protections: {
             registration: true,
@@ -289,9 +289,6 @@ module ForumFortress
               timeout: [CHECK_ENDPOINT_TIMEOUT_SECONDS, remaining].min,
             )
             health_endpoint = base
-            best_effort_state_update("health_endpoint") do
-              write_if_changed(:forum_fortress_preferred_endpoint, base)
-            end
             break
           rescue StandardError => error
             health_error = error
@@ -441,9 +438,12 @@ module ForumFortress
 
       def check_candidates
         configured = API_BASE_URLS.fetch(region, API_BASE_URLS["global"])
-        preferred = safe_endpoint(read(:forum_fortress_preferred_endpoint, ""))
-        preferred = nil if region != "global" && preferred != configured
-        candidates = region == "global" ? [preferred, configured] : [configured, preferred]
+        offline_preferred = safe_endpoint(read(:forum_fortress_preferred_endpoint, ""))
+        return [offline_preferred] if api_key.start_with?("ff_ob_") && offline_preferred
+
+        # GeoDNS chooses the serving edge. Fallbacks are retried only within
+        # this request, so the next request immediately fails back to GeoDNS.
+        candidates = [configured]
         candidates << API_BASE_URLS["global"] if global_fallback? && region != "global"
         candidates.compact.uniq
       end
@@ -486,10 +486,7 @@ module ForumFortress
       def restore_identity(snapshot)
         write_if_changed(:forum_fortress_api_key, snapshot[:api_key])
         write_if_changed(:forum_fortress_site_id, snapshot[:site_id])
-        write_if_changed(
-          :forum_fortress_preferred_endpoint,
-          snapshot[:preferred_endpoint],
-        )
+        write_if_changed(:forum_fortress_preferred_endpoint, snapshot[:preferred_endpoint])
       end
 
       def recover_identity(error)
@@ -525,11 +522,17 @@ module ForumFortress
           end
         end
 
+        effective_key = api_key_value.empty? ? api_key : api_key_value
         candidate = safe_endpoint(response["preferred_endpoint"] || endpoint)
-        if candidate
+        if effective_key.start_with?("ff_ob_") && candidate
           best_effort_state_update("preferred_endpoint") do
             write_if_changed(:forum_fortress_preferred_endpoint, candidate)
           end
+        elsif !effective_key.empty?
+          write_if_changed(
+            :forum_fortress_preferred_endpoint,
+            API_BASE_URLS.fetch(region, API_BASE_URLS["global"]),
+          )
         end
       end
 

@@ -1,15 +1,20 @@
 # frozen_string_literal: true
+# Copyright (c) 2026 Marscastle Ltd trading as Forum Fortress
+# SPDX-License-Identifier: GPL-2.0-or-later
 
 # name: discourse-forum-fortress
 # about: Forum Fortress anti-spam protection for Discourse
-# version: 0.1.0-alpha.2
+# version: 0.1.0-alpha.3
 # authors: Forum Fortress
 # url: https://github.com/Forum-Fortress/discourse
 # required_version: 2026.8.0
 
+require "request_store"
+
 enabled_site_setting :forum_fortress_enabled
 add_admin_route "forum_fortress.admin.title", "discourse-forum-fortress", use_new_show_route: true
 register_asset "stylesheets/common/forum-fortress.scss"
+register_svg_icon "arrow-up-right-from-square"
 register_svg_icon "shield-halved"
 
 module ::ForumFortress

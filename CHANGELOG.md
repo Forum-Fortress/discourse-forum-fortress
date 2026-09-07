@@ -1,7 +1,27 @@
 # Changelog
 
+## 0.1.0-alpha.3 - 2026-09-07
+
+- First release licensed as free and open-source software under
+  `GPL-2.0-or-later`; add the complete GPLv2 text, project notice and
+  contribution terms while keeping hosted-service access separate.
+
+- Exclude private messages and access-restricted category content from external
+  topic, reply, body-edit, title-edit, and combined-edit checks.
+- Resolve requested, default, current, and pending destination categories
+  conservatively; skip external content checks when visibility is unresolved or
+  either side of a content-bearing move is restricted.
+- Preserve one request for eligible combined title/body edits and avoid adding
+  checks for category-only moves.
+- Add transport-level privacy regressions and apply the configured Syntax Tree
+  formatting to the two files that failed the `0.1.0-alpha.2` public CI run.
+- Clarify synchronous timeouts, fail-open defaults, decision handling,
+  moderation-queue limitations, identity data, and supported Discourse versions.
+
 ## 0.1.0-alpha.2 - 2026-08-28
 
+- Start every normal request at the selected GeoDNS hostname and keep fallback
+  success non-sticky so the next request immediately fails back to GeoDNS.
 - Recover lost bootstrap responses from a ten-minute background heartbeat,
   including quiet forums with no protected traffic.
 - Repair key-only identities through authenticated site status and immediately
