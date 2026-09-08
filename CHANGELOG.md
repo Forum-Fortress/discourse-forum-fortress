@@ -13,8 +13,9 @@
   either side of a content-bearing move is restricted.
 - Preserve one request for eligible combined title/body edits and avoid adding
   checks for category-only moves.
-- Add transport-level privacy regressions and apply the configured Syntax Tree
-  formatting to the two files that failed the `0.1.0-alpha.2` public CI run.
+- Add private transport-level privacy regression coverage and apply the configured
+  Syntax Tree formatting to the two files that failed the `0.1.0-alpha.2` public
+  CI run.
 - Clarify synchronous timeouts, fail-open defaults, decision handling,
   moderation-queue limitations, identity data, and supported Discourse versions.
 

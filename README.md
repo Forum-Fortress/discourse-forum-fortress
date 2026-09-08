@@ -4,7 +4,7 @@
 
 Forum Fortress is a native Discourse plugin that checks selected user-generated activity against the Forum Fortress anti-spam service. This repository contains the first Discourse implementation and is intended to be installed as a normal Discourse plugin.
 
-> **Release status:** `0.1.0-alpha.3` is the next alpha candidate. It is not public until the source/tag parity and release checks pass. Install it on a current, backed-up Discourse site and validate the protected flows before relying on it in production.
+> **Release status:** Public alpha. Install on a current, backed-up Discourse site and validate the protected flows before relying on it in production.
 
 ## Current coverage
 
@@ -20,7 +20,7 @@ Here, “without read restrictions” describes the category’s Discourse acces
 
 ## Requirements
 
-- A current supported Discourse installation. The implementation was researched against Discourse `main` at commit `e5aca7217abbc9ea113da2751a9720254b8b7440` on 2026-08-25.
+- A current supported Discourse installation. The plugin declares its minimum supported Discourse version in `plugin.rb`.
 - Outbound HTTPS access from the Discourse application to the Forum Fortress control and check endpoints.
 - Forum Fortress account access or an existing Forum Fortress site API key. A blank key can be bootstrapped by the first connection test or protected request when the control plane permits anonymous site onboarding. An existing site can instead use a short-lived bootstrap token issued by Forum Fortress.
 
@@ -47,10 +47,12 @@ cd /var/discourse
 
 This is Discourse's standard plugin installation method. Back up the site before rebuilding.
 
-For a development checkout, a symlink is convenient:
+For a development checkout, clone this repository and symlink it into the
+Discourse plugin directory:
 
 ```sh
-ln -s /path/to/fortress/plugins/discourse-forum-fortress /path/to/discourse/plugins/discourse-forum-fortress
+git clone https://github.com/Forum-Fortress/discourse.git /path/to/discourse-forum-fortress
+ln -s /path/to/discourse-forum-fortress /path/to/discourse/plugins/discourse-forum-fortress
 ```
 
 Restart a development instance or rebuild a production instance after adding or updating the plugin. Do not copy this plugin into Discourse core or patch core files.
@@ -99,7 +101,11 @@ The plugin does not add application-log entries containing raw emails, IP addres
 
 ## Updating and compatibility
 
-Back up the site and run `./launcher rebuild app`; the normal rebuild process fetches the current plugin source. Update the plugin together with the Discourse version it targets, then re-run the admin connection test. The declared minimum is Discourse `2026.8.0`. The backend suite is tested against the official `v2026.8.0` and `v2026.9.0-latest` tags; older releases are not claimed. Review the changelog and release notes before upgrading across a major Discourse change.
+Back up the site and run `./launcher rebuild app`; the normal rebuild process fetches the current plugin source. Update the plugin together with the Discourse version it targets, then re-run the admin connection test. The plugin targets current supported Discourse releases and declares a minimum of Discourse `2026.8.0`; older releases are not supported. Review the changelog and release notes before upgrading across a major Discourse change.
+
+## Public CI and release validation
+
+Public GitHub Actions uses the standard Discourse plugin workflow. It runs the repository's JavaScript, stylesheet, type, Ruby and formatting checks, then installs the plugin against current Discourse core to validate database creation and migrations, Zeitwerk eager loading and reloading, and boot compatibility. Comprehensive behavioural, security and service-integration regression tests remain private and are not represented by the public CI badge. Because this repository does not publish those RSpec or QUnit suites, those workflow stages are skipped.
 
 ## Known first-release limitations
 
@@ -107,7 +113,7 @@ Back up the site and run `./launcher rebuild app`; the normal rebuild process fe
 - Staged-user and automated/system flows are intentionally excluded and need a real site review if a deployment wants different policy.
 - OAuth/SSO and unusual import/API creation paths should be exercised on the eventual test instance.
 - Out-of-band model saves with no explicit acting user are deliberately skipped. Queued-post approval and non-standard plugins that bypass `NewPostManager` or `PostRevisor` need integration validation.
-- The local Docker workflow validates current core boot, route discovery, plugin loading, the Ember bundle, the dashboard route/rendering, the admin status request, connection-test presentation, and the plugin RSpec suite. A signed-in visual pass and live portal handoff should still be repeated after each deployment.
+- A signed-in visual pass and live portal handoff should still be repeated after each deployment.
 
 ## License
 
