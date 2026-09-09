@@ -6,7 +6,7 @@
 # about: Forum Fortress anti-spam protection for Discourse
 # version: 0.1.0-alpha.3
 # authors: Forum Fortress
-# url: https://github.com/Forum-Fortress/discourse
+# url: https://github.com/Forum-Fortress/discourse-forum-fortress
 # required_version: 2026.8.0
 
 require "request_store"
