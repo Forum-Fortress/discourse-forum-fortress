@@ -1,6 +1,6 @@
 # Forum Fortress for Discourse
 
-[![Discourse Plugin CI](https://github.com/Forum-Fortress/discourse/actions/workflows/discourse-plugin.yml/badge.svg)](https://github.com/Forum-Fortress/discourse/actions/workflows/discourse-plugin.yml)
+[![Discourse Plugin CI](https://github.com/Forum-Fortress/discourse-forum-fortress/actions/workflows/discourse-plugin.yml/badge.svg)](https://github.com/Forum-Fortress/discourse-forum-fortress/actions/workflows/discourse-plugin.yml)
 
 Forum Fortress is a native Discourse plugin that checks selected user-generated activity against the Forum Fortress anti-spam service. This repository contains the first Discourse implementation and is intended to be installed as a normal Discourse plugin.
 
@@ -35,7 +35,7 @@ hooks:
         cd: $home/plugins
         cmd:
           - git clone https://github.com/discourse/docker_manager.git
-          - git clone https://github.com/Forum-Fortress/discourse.git discourse-forum-fortress
+          - git clone https://github.com/Forum-Fortress/discourse-forum-fortress.git
 ```
 
 Keep the existing `docker_manager` line and add only the Forum Fortress line beneath it. If the existing lines use `sudo -E -u discourse`, use the same prefix for this clone command. Then rebuild:
@@ -51,7 +51,8 @@ For a development checkout, clone this repository and symlink it into the
 Discourse plugin directory:
 
 ```sh
-git clone https://github.com/Forum-Fortress/discourse.git /path/to/discourse-forum-fortress
+cd /path/to
+git clone https://github.com/Forum-Fortress/discourse-forum-fortress.git
 ln -s /path/to/discourse-forum-fortress /path/to/discourse/plugins/discourse-forum-fortress
 ```
 
