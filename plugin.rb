@@ -4,7 +4,7 @@
 
 # name: discourse-forum-fortress
 # about: Forum Fortress anti-spam protection for Discourse
-# version: 0.1.0-alpha.3
+# version: 0.2.0-alpha.1
 # authors: Forum Fortress
 # url: https://github.com/Forum-Fortress/discourse-forum-fortress
 # required_version: 2026.8.0

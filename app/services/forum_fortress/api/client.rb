@@ -16,7 +16,7 @@ module ForumFortress
     end
 
     class Client
-      PLUGIN_VERSION = "0.1.0-alpha.3"
+      PLUGIN_VERSION = "0.2.0-alpha.1"
       PLATFORM = "discourse"
       CONTROL_BASE_URL = "https://fortress.ffapi.net"
       API_BASE_URLS = {
@@ -34,6 +34,8 @@ module ForumFortress
       MIN_TIMEOUT_SECONDS = 1
       MAX_TIMEOUT_SECONDS = 30
       BOOTSTRAP_RETRY_BACKOFF_SECONDS = 300
+      STANDARD_HEARTBEAT_INTERVAL_SECONDS = 3600
+      PRO_HEARTBEAT_INTERVAL_SECONDS = 600
 
       def initialize(settings: nil, transport: nil, logger: nil, clock: nil, domain: nil)
         @settings = settings || SiteSetting
@@ -124,7 +126,7 @@ module ForumFortress
 
         payload = common_payload
         payload["bootstrap_token"] = bootstrap_token unless bootstrap_token.empty?
-        candidates = ([CONTROL_BASE_URL] + check_candidates).uniq
+        candidates = check_candidates
         deadline = monotonic_now + BOOTSTRAP_TOTAL_TIMEOUT_SECONDS
         last_error = nil
 
@@ -179,30 +181,24 @@ module ForumFortress
         return nil unless enabled?
         return nil if api_key.empty?
 
-        status =
-          @transport.get_json(
-            CONTROL_BASE_URL,
-            "/v1/site/status",
-            query: {
-              domain: domain,
-            },
-            headers: {
-              "X-FF-Key" => api_key,
-            },
-            timeout: [timeout_budget, 2].min,
-          )
+        status, endpoint = get_across_candidates(
+          "/v1/site/status",
+          query: { domain: domain },
+          headers: { "X-FF-Key" => api_key },
+          timeout: [timeout_budget, 2].min,
+        )
         if status["site_id"].to_s.strip.empty?
           raise RequestError.new("invalid site status", code: "invalid_site_status")
         end
 
-        persist_identity(status)
+        persist_identity(status, endpoint:)
         status
       end
 
       # Scheduled independently of protected traffic so a quiet forum can
       # recover a lost bootstrap response and complete the two-way handshake.
       # Background failures are recorded but never affect forum availability.
-      def heartbeat
+      def heartbeat(force: false)
         return nil unless enabled?
 
         rebootstrap_attempted = false
@@ -210,14 +206,20 @@ module ForumFortress
           bootstrap_if_needed
           return nil if api_key.empty? || site_id.empty?
 
-          response =
-            @transport.post_json(
-              CONTROL_BASE_URL,
-              "/v1/site/ping",
-              common_payload,
-              timeout: [timeout_budget, 3].min,
-            )
-          best_effort_state_update("heartbeat_identity") { persist_identity(response) }
+          state = endpoint_state
+          last_attempt = state["heartbeat_last_attempt_at"].to_i
+          plan = state["plan_name"].to_s.downcase
+          interval = %w[pro multimod].include?(plan) ? PRO_HEARTBEAT_INTERVAL_SECONDS : STANDARD_HEARTBEAT_INTERVAL_SECONDS
+          return nil if !force && last_attempt.positive? && now - last_attempt < interval
+          state["heartbeat_last_attempt_at"] = now
+          best_effort_state_update("heartbeat_attempt") { save_endpoint_state(state) }
+
+          response, endpoint = post_across_candidates(
+            "/v1/site/ping",
+            common_payload,
+            timeout: [timeout_budget, 3].min,
+          )
+          best_effort_state_update("heartbeat_identity") { persist_identity(response, endpoint:) }
           best_effort_state_update("heartbeat_success") do
             state = endpoint_state
             state["last_site_ping_at"] = now
@@ -275,47 +277,16 @@ module ForumFortress
           bootstrap_if_needed
         end
 
-        health_endpoint = nil
-        health_error = nil
-        health_deadline = monotonic_now + [timeout_budget, 5].min
-        check_candidates.each do |base|
-          remaining = health_deadline - monotonic_now
-          break if remaining <= 0
-
-          begin
-            @transport.get_json(
-              base,
-              "/health",
-              timeout: [CHECK_ENDPOINT_TIMEOUT_SECONDS, remaining].min,
-            )
-            health_endpoint = base
-            break
-          rescue StandardError => error
-            health_error = error
-          end
-        end
-
+        heartbeat_response = heartbeat(force: true)
         status = site_status
-
-        best_effort_state_update("connection_identity") do
-          persist_identity(status, endpoint: health_endpoint)
-        end
+        best_effort_state_update("connection_identity") { persist_identity(status) }
         best_effort_state_update("clear_error") { clear_error }
-
-        if health_endpoint
-          { ok: true, health: true, site_status: true, endpoint: health_endpoint }
-        else
-          error =
-            health_error ||
-              RequestError.new("check endpoint unavailable", code: "check_endpoint_unavailable")
-          remember_error(error)
-          { ok: false, health: false, site_status: true, error_code: error_code(error) }
-        end
+        { ok: !heartbeat_response.nil?, health: !heartbeat_response.nil?, site_status: true }
       rescue StandardError => error
         best_effort_state_update("connection_test_failure") { remember_error(error) }
         {
           ok: false,
-          health: !health_endpoint.nil?,
+          health: false,
           site_status: false,
           error_code: error_code(error),
         }
@@ -327,13 +298,11 @@ module ForumFortress
         rebootstrap_attempted = false
         begin
           bootstrap_if_needed
-          response =
-            @transport.post_json(
-              CONTROL_BASE_URL,
-              "/v1/site/portal",
-              common_payload,
-              timeout: [timeout_budget, 3].min,
-            )
+          response, = post_across_candidates(
+            "/v1/site/portal",
+            common_payload,
+            timeout: [timeout_budget, 3].min,
+          )
           best_effort_state_update("clear_error") { clear_error }
           response
         rescue RequestError => error
@@ -363,12 +332,12 @@ module ForumFortress
 
         return { "status" => "no_identity" } if api_key.empty? || site_id.empty?
 
-        @transport.post_json(
-          CONTROL_BASE_URL,
+        response, = post_across_candidates(
           "/v1/site/deprovision",
           common_payload.merge("reason" => normalized_reason),
           timeout: [timeout_budget, 3].min,
         )
+        response
       rescue RequestError => error
         if error.status == 410 && error.code == "site_not_found"
           return { "status" => "already_removed" }
@@ -383,6 +352,30 @@ module ForumFortress
         best_effort_state_update("portal_failure") { remember_error(error) }
         log_failure("site/portal", error)
         raise Unavailable.new(cause: error)
+      end
+
+      def post_across_candidates(path, payload, timeout:)
+        last_error = nil
+        check_candidates.each do |base|
+          begin
+            return [@transport.post_json(base, path, payload, timeout:), base]
+          rescue StandardError => error
+            last_error = error
+          end
+        end
+        raise(last_error || RequestError.new("no endpoint available", code: "endpoint_unavailable"))
+      end
+
+      def get_across_candidates(path, query:, headers:, timeout:)
+        last_error = nil
+        check_candidates.each do |base|
+          begin
+            return [@transport.get_json(base, path, query:, headers:, timeout:), base]
+          rescue StandardError => error
+            last_error = error
+          end
+        end
+        raise(last_error || RequestError.new("no endpoint available", code: "endpoint_unavailable"))
       end
 
       def request_check(event_type, payload)
@@ -444,7 +437,11 @@ module ForumFortress
         # GeoDNS chooses the serving edge. Fallbacks are retried only within
         # this request, so the next request immediately fails back to GeoDNS.
         candidates = [configured]
-        candidates << API_BASE_URLS["global"] if global_fallback? && region != "global"
+        if region == "global"
+          candidates << CONTROL_BASE_URL
+        elsif global_fallback?
+          candidates.concat([API_BASE_URLS["global"], CONTROL_BASE_URL])
+        end
         candidates.compact.uniq
       end
 
@@ -534,6 +531,11 @@ module ForumFortress
             API_BASE_URLS.fetch(region, API_BASE_URLS["global"]),
           )
         end
+        if !response["plan"].to_s.strip.empty?
+          state = endpoint_state
+          state["plan_name"] = response["plan"].to_s.strip.downcase
+          save_endpoint_state(state)
+        end
       end
 
       def clear_error
@@ -607,7 +609,7 @@ module ForumFortress
 
       def safe_endpoint(value)
         value = value.to_s.strip.chomp("/")
-        return nil unless API_BASE_URLS.value?(value)
+        return nil unless (API_BASE_URLS.values + [CONTROL_BASE_URL]).include?(value)
 
         value
       end

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.0-alpha.1 - 2026-09-11
+
+- Use deterministic GeoDNS routing for every API operation: global requests
+  fall back from `api.ffapi.net` to `fortress.ffapi.net`, while regional
+  requests remain locked unless global fallback is enabled.
+- Replace unauthenticated health probing with an authenticated heartbeat and
+  limit standard-plan attempts to hourly while retaining ten-minute
+  Pro/MultiMod check-ins.
+
 ## 0.1.0-alpha.3 - 2026-09-07
 
 - First release licensed as free and open-source software under
