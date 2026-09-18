@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0-alpha.2 - 2026-09-18
+
+- Route lifecycle and bootstrap requests through the resilient public API path.
+
 ## 0.2.0-alpha.1 - 2026-09-11
 
 - Use deterministic GeoDNS routing for every API operation: global requests

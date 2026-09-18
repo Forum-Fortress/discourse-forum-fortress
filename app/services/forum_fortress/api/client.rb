@@ -16,9 +16,9 @@ module ForumFortress
     end
 
     class Client
-      PLUGIN_VERSION = "0.2.0-alpha.1"
+      PLUGIN_VERSION = "0.2.0-alpha.2"
       PLATFORM = "discourse"
-      CONTROL_BASE_URL = "https://fortress.ffapi.net"
+      CONTROL_BASE_URL = "https://api.ffapi.net"
       API_BASE_URLS = {
         "global" => "https://api.ffapi.net",
         "uk" => "https://api-uk.ffapi.net",
