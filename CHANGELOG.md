@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0 - 2026-09-25
+
+- First stable release of the Discourse plugin.
+- Harden request routing, offline bootstrap recovery, failover boundaries,
+  distributed identity recovery, and first-post edit validation for production
+  use.
+- Keep the plugin package and customer-facing release metadata aligned at 1.0.
+
 ## 0.2.0-alpha.2 - 2026-09-18
 
 - Route lifecycle and bootstrap requests through the resilient public API path.

@@ -18,8 +18,8 @@ importers:
         specifier: ^9.2.3
         version: 9.2.4
       discourse:
-        specifier: npm:@discourse/types@2026.3.0-d02b2966
-        version: '@discourse/types@2026.3.0-d02b2966'
+        specifier: npm:@discourse/types@2026.9.0-cc57a7e8
+        version: '@discourse/types@2026.9.0-cc57a7e8'
       eslint:
         specifier: 10.6.0
         version: 10.6.0
@@ -310,8 +310,8 @@ packages:
       prettier: 3.8.1
       stylelint: 17.5.0
 
-  '@discourse/types@2026.3.0-d02b2966':
-    resolution: {integrity: sha512-TzgaVI0serxgv3/ebc1or0MRJIDRMYhTd+B9gA7HTsAZmMGCRPrrxYeqD5TAkZurL5Tj1o6fP5Jk6mbyFm5Qwg==}
+  '@discourse/types@2026.9.0-cc57a7e8':
+    resolution: {integrity: sha512-yxR72bEx7BWZZgyehZfu6GTbDFlyJFI9PHH9KBYmiftC9PSWjUAckraWBHN55DjKZuEVQW0HCDi/2PtXxTVlnA==}
     engines: {node: '>= 20', npm: please-use-pnpm, pnpm: ^10, yarn: please-use-pnpm}
 
   '@ember-data/rfc395-data@0.0.4':
@@ -2083,7 +2083,7 @@ snapshots:
       - postcss
       - supports-color
 
-  '@discourse/types@2026.3.0-d02b2966': {}
+  '@discourse/types@2026.9.0-cc57a7e8': {}
 
   '@ember-data/rfc395-data@0.0.4': {}
 

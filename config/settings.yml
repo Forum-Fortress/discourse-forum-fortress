@@ -9,6 +9,7 @@ forum_fortress:
   forum_fortress_bootstrap_token:
     default: ""
     client: false
+    secret: true
   forum_fortress_site_id:
     default: ""
     client: false

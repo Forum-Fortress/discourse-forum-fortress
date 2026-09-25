@@ -14,7 +14,16 @@ module ForumFortress
       previous_context = RequestStore.store[REVISION_CONTEXT_KEY]
       RequestStore.store[REVISION_CONTEXT_KEY] = {
         post_id: @post.id,
-        title_changed: attributes.key?(:title) && attributes[:title].to_s != @topic.title.to_s,
+        # PostRevisor saves the post before it runs Topic's before_validation
+        # callback.  Compare the values after the same normalization Discourse
+        # applies there, otherwise a title such as "Title   " looks changed to
+        # this extension while Topic correctly treats it as unchanged.  In
+        # that case the body validator must still run; skipping it creates a
+        # first-post content enforcement bypass.
+        title_changed:
+          attributes.key?(:title) &&
+            forum_fortress_normalized_title(attributes[:title]) !=
+              forum_fortress_normalized_title(@topic.title),
         current_category_id: current_category_id,
         intended_category_id: intended_category_id,
         category_changed:
@@ -33,6 +42,16 @@ module ForumFortress
     end
 
     private
+
+    def forum_fortress_normalized_title(value)
+      if defined?(TextCleaner) && TextCleaner.respond_to?(:clean_title)
+        TextCleaner.clean_title(TextSentinel.title_sentinel(value).text)
+      else
+        value.to_s.gsub(/\s+/, " ").strip
+      end
+    rescue StandardError
+      value.to_s.gsub(/\s+/, " ").strip
+    end
 
     def forum_fortress_category_id(value)
       numeric = value.is_a?(Integer) || value.to_s.match?(/\A\d+\z/)

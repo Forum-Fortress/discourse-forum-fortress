@@ -16,7 +16,7 @@ module ForumFortress
     end
 
     class Client
-      PLUGIN_VERSION = "0.2.0-alpha.2"
+      PLUGIN_VERSION = "1.0"
       PLATFORM = "discourse"
       CONTROL_BASE_URL = "https://api.ffapi.net"
       API_BASE_URLS = {
@@ -34,6 +34,7 @@ module ForumFortress
       MIN_TIMEOUT_SECONDS = 1
       MAX_TIMEOUT_SECONDS = 30
       BOOTSTRAP_RETRY_BACKOFF_SECONDS = 300
+      IDENTITY_LOCK_VALIDITY_SECONDS = 60
       STANDARD_HEARTBEAT_INTERVAL_SECONDS = 3600
       PRO_HEARTBEAT_INTERVAL_SECONDS = 600
 
@@ -43,6 +44,16 @@ module ForumFortress
         @logger = logger || (defined?(Rails) ? Rails.logger : nil)
         @clock = clock || -> { Time.now.to_i }
         @domain_override = domain
+      end
+
+      class << self
+        def fallback_mutexes
+          @fallback_mutexes ||= {}
+        end
+
+        def fallback_mutexes_guard
+          @fallback_mutexes_guard ||= Mutex.new
+        end
       end
 
       def enabled?
@@ -110,9 +121,16 @@ module ForumFortress
 
       def bootstrap_if_needed(force: false)
         return nil unless enabled?
+        with_identity_lock { bootstrap_if_needed_unlocked(force:) }
+      end
+
+      def bootstrap_if_needed_unlocked(force: false)
+        offline_rebootstrap = offline_bootstrap_key? && (force || offline_rebootstrap_due?)
         if !force && !api_key.empty?
-          site_status if site_id.empty?
-          return nil
+          unless offline_rebootstrap
+            site_status(lock: false) if site_id.empty?
+            return nil
+          end
         end
 
         state = endpoint_state
@@ -124,9 +142,14 @@ module ForumFortress
         state["last_bootstrap_attempt_at"] = now
         best_effort_state_update("bootstrap_attempt") { save_endpoint_state(state) }
 
-        payload = common_payload
+        payload = bootstrap_payload
         payload["bootstrap_token"] = bootstrap_token unless bootstrap_token.empty?
-        candidates = check_candidates
+        candidates =
+          if offline_rebootstrap
+            offline_rebootstrap_candidates
+          else
+            check_candidates
+          end
         deadline = monotonic_now + BOOTSTRAP_TOTAL_TIMEOUT_SECONDS
         last_error = nil
 
@@ -149,7 +172,7 @@ module ForumFortress
                     )
             end
 
-            persist_identity(response, endpoint: base)
+            persist_identity(response, endpoint: base, lock: false)
             if api_key.empty?
               raise RequestError.new(
                       "bootstrap identity could not be stored",
@@ -165,6 +188,7 @@ module ForumFortress
             return response
           rescue StandardError => error
             last_error = error
+            raise unless retryable_request_error?(error, allow_node_mismatch: offline_rebootstrap)
           end
         end
 
@@ -177,9 +201,11 @@ module ForumFortress
         )
       end
 
-      def site_status
+      def site_status(lock: true)
         return nil unless enabled?
         return nil if api_key.empty?
+
+        return with_identity_lock { site_status(lock: false) } if lock
 
         status, endpoint = get_across_candidates(
           "/v1/site/status",
@@ -191,7 +217,7 @@ module ForumFortress
           raise RequestError.new("invalid site status", code: "invalid_site_status")
         end
 
-        persist_identity(status, endpoint:)
+        persist_identity(status, endpoint:, lock: false)
         status
       end
 
@@ -211,8 +237,11 @@ module ForumFortress
           plan = state["plan_name"].to_s.downcase
           interval = %w[pro multimod].include?(plan) ? PRO_HEARTBEAT_INTERVAL_SECONDS : STANDARD_HEARTBEAT_INTERVAL_SECONDS
           return nil if !force && last_attempt.positive? && now - last_attempt < interval
-          state["heartbeat_last_attempt_at"] = now
-          best_effort_state_update("heartbeat_attempt") { save_endpoint_state(state) }
+          with_identity_lock do
+            state = endpoint_state
+            state["heartbeat_last_attempt_at"] = now
+            best_effort_state_update("heartbeat_attempt") { save_endpoint_state(state) }
+          end
 
           response, endpoint = post_across_candidates(
             "/v1/site/ping",
@@ -221,11 +250,13 @@ module ForumFortress
           )
           best_effort_state_update("heartbeat_identity") { persist_identity(response, endpoint:) }
           best_effort_state_update("heartbeat_success") do
-            state = endpoint_state
-            state["last_site_ping_at"] = now
-            state.delete("last_error_code")
-            state.delete("last_error_at")
-            save_endpoint_state(state)
+            with_identity_lock do
+              state = endpoint_state
+              state["last_site_ping_at"] = now
+              state.delete("last_error_code")
+              state.delete("last_error_at")
+              save_endpoint_state(state)
+            end
           end
           response
         rescue RequestError => error
@@ -255,7 +286,13 @@ module ForumFortress
           global_fallback: global_fallback?,
           fail_open: fail_open?,
           timeout: timeout_budget,
-          preferred_endpoint: API_BASE_URLS.fetch(region, API_BASE_URLS["global"]),
+          preferred_endpoint:
+            if offline_bootstrap_key?
+              safe_endpoint(endpoint_state["offline_preferred_endpoint"]) ||
+                safe_endpoint(read(:forum_fortress_preferred_endpoint, ""))
+            else
+              API_BASE_URLS.fetch(region, API_BASE_URLS["global"])
+            end,
           last_error_code: endpoint_state["last_error_code"],
           protections: {
             registration: true,
@@ -361,6 +398,7 @@ module ForumFortress
             return [@transport.post_json(base, path, payload, timeout:), base]
           rescue StandardError => error
             last_error = error
+            raise unless retryable_request_error?(error)
           end
         end
         raise(last_error || RequestError.new("no endpoint available", code: "endpoint_unavailable"))
@@ -373,6 +411,7 @@ module ForumFortress
             return [@transport.get_json(base, path, query:, headers:, timeout:), base]
           rescue StandardError => error
             last_error = error
+            raise unless retryable_request_error?(error)
           end
         end
         raise(last_error || RequestError.new("no endpoint available", code: "endpoint_unavailable"))
@@ -399,6 +438,7 @@ module ForumFortress
             ]
           rescue StandardError => error
             last_error = error
+            raise unless retryable_request_error?(error)
           end
         end
 
@@ -419,6 +459,17 @@ module ForumFortress
         payload.reject { |_key, value| value.to_s.empty? }
       end
 
+      def bootstrap_payload
+        payload = common_payload
+        return payload unless offline_bootstrap_key?
+
+        state = endpoint_state
+        issuer_node_id = state["issuer_node_id"].to_s.strip
+        payload["offline_issuer_node_id"] = issuer_node_id unless issuer_node_id.empty?
+        payload["offline_site_id"] = site_id unless site_id.empty?
+        payload
+      end
+
       def platform_version
         if defined?(Discourse::VERSION::STRING)
           Discourse::VERSION::STRING
@@ -431,8 +482,15 @@ module ForumFortress
 
       def check_candidates
         configured = API_BASE_URLS.fetch(region, API_BASE_URLS["global"])
-        offline_preferred = safe_endpoint(read(:forum_fortress_preferred_endpoint, ""))
-        return [offline_preferred] if api_key.start_with?("ff_ob_") && offline_preferred
+        if offline_bootstrap_key?
+          state = endpoint_state
+          offline_preferred =
+            safe_endpoint(state["offline_preferred_endpoint"]) ||
+              safe_endpoint(read(:forum_fortress_preferred_endpoint, ""))
+          # An offline-scoped key is only valid on its issuer. Do not silently
+          # send it to a GeoDNS endpoint when its pin is missing or malformed.
+          return offline_preferred ? [offline_preferred] : []
+        end
 
         # GeoDNS chooses the serving edge. Fallbacks are retried only within
         # this request, so the next request immediately fails back to GeoDNS.
@@ -443,6 +501,13 @@ module ForumFortress
           candidates.concat([API_BASE_URLS["global"], CONTROL_BASE_URL])
         end
         candidates.compact.uniq
+      end
+
+      def offline_rebootstrap_candidates
+        state = endpoint_state
+        fallback = Array(state["fallback_bootstrap_endpoints"]).filter_map { |value| safe_endpoint(value) }
+        configured = API_BASE_URLS.fetch(region, API_BASE_URLS["global"])
+        (fallback + [configured, CONTROL_BASE_URL]).compact.uniq
       end
 
       def region
@@ -457,6 +522,27 @@ module ForumFortress
       def timeout_budget
         value = read(:forum_fortress_timeout, 5).to_i
         [[value, MIN_TIMEOUT_SECONDS].max, MAX_TIMEOUT_SECONDS].min
+      end
+
+      def offline_bootstrap_key?
+        api_key.start_with?("ff_ob_")
+      end
+
+      def offline_rebootstrap_due?
+        return false unless offline_bootstrap_key?
+
+        rebootstrap_at = endpoint_state["offline_rebootstrap_at"].to_i
+        rebootstrap_at.positive? && now >= rebootstrap_at
+      end
+
+      def retryable_request_error?(error, allow_node_mismatch: false)
+        return true unless error.is_a?(RequestError)
+
+        status = error.status.to_i
+        return true if [408, 425, 500, 502, 503, 504].include?(status)
+        return true if allow_node_mismatch && status == 403 && error.code.to_s == "node_mismatch"
+
+        status.zero? && %w[timeout dns_or_socket_error tls_error transport_error].include?(error.code.to_s)
       end
 
       def stale_identity_error?(error)
@@ -487,13 +573,15 @@ module ForumFortress
       end
 
       def recover_identity(error)
-        snapshot = identity_snapshot
-        begin
-          prepare_identity_recovery(error)
-          bootstrap_if_needed(force: true)
-        rescue StandardError
-          best_effort_state_update("restore_stale_identity") { restore_identity(snapshot) }
-          raise
+        with_identity_lock do
+          snapshot = identity_snapshot
+          begin
+            prepare_identity_recovery(error)
+            bootstrap_if_needed_unlocked(force: true)
+          rescue StandardError
+            best_effort_state_update("restore_stale_identity") { restore_identity(snapshot) }
+            raise
+          end
         end
       end
 
@@ -503,13 +591,21 @@ module ForumFortress
       end
 
       def prepare_identity_recovery(error)
+        # A node mismatch is the expected signal that a node-scoped offline
+        # token reached the wrong edge. Keep the token and its offline site
+        # metadata so the forced bootstrap can try the advertised fallback
+        # issuers and reconcile it when control is reachable.
+        return if offline_bootstrap_key? && error.respond_to?(:code) && error.code.to_s == "node_mismatch"
+
         clear_site_identity
         return if error.respond_to?(:code) && error.code.to_s.downcase == "stale_site"
 
         write_if_changed(:forum_fortress_api_key, "")
       end
 
-      def persist_identity(response, endpoint: nil)
+      def persist_identity(response, endpoint: nil, lock: true)
+        return with_identity_lock { persist_identity(response, endpoint:, lock: false) } if lock
+
         api_key_value = response["api_key"].to_s.strip
         site_id_value = response["site_id"].to_s.strip
         write_if_changed(:forum_fortress_api_key, api_key_value) unless api_key_value.empty?
@@ -520,31 +616,60 @@ module ForumFortress
         end
 
         effective_key = api_key_value.empty? ? api_key : api_key_value
-        candidate = safe_endpoint(response["preferred_endpoint"] || endpoint)
-        if effective_key.start_with?("ff_ob_") && candidate
-          best_effort_state_update("preferred_endpoint") do
-            write_if_changed(:forum_fortress_preferred_endpoint, candidate)
+        offline_response =
+          response["key_type"].to_s == "offline_bootstrap" || effective_key.start_with?("ff_ob_")
+        candidate = safe_endpoint(response["preferred_endpoint"])
+        candidate ||= safe_endpoint(endpoint) unless offline_response
+        state = endpoint_state
+        original_state = state.dup
+        if offline_response
+          if candidate
+            state["offline_pinned"] = true
+            state["offline_preferred_endpoint"] = candidate
+            state["issuer_node_id"] = response["issuer_node_id"].to_s.strip
+            state["offline_canonical_domain"] = response["canonical_domain"].to_s.strip
+            state["offline_rebootstrap_at"] =
+              now + [response["rebootstrap_after_seconds"].to_i, 60].max
+            state["fallback_bootstrap_endpoints"] =
+              Array(response["fallback_bootstrap_endpoints"]).filter_map { |value| safe_endpoint(value) }
+            state["key_type"] = "offline_bootstrap"
+            best_effort_state_update("preferred_endpoint") do
+              write_if_changed(:forum_fortress_preferred_endpoint, candidate)
+            end
           end
         elsif !effective_key.empty?
+          state.delete("offline_pinned")
+          state.delete("issuer_node_id")
+          state.delete("offline_preferred_endpoint")
+          state.delete("offline_rebootstrap_at")
+          state.delete("offline_canonical_domain")
+          state.delete("fallback_bootstrap_endpoints")
+          response_key_type = response["key_type"].to_s.strip
+          if response_key_type.empty?
+            state.delete("key_type")
+          else
+            state["key_type"] = response_key_type
+          end
           write_if_changed(
             :forum_fortress_preferred_endpoint,
             API_BASE_URLS.fetch(region, API_BASE_URLS["global"]),
           )
         end
         if !response["plan"].to_s.strip.empty?
-          state = endpoint_state
           state["plan_name"] = response["plan"].to_s.strip.downcase
-          save_endpoint_state(state)
         end
+        save_endpoint_state(state) unless state == original_state
       end
 
       def clear_error
-        state = endpoint_state
-        return unless state.key?("last_error_code") || state.key?("last_error_at")
+        with_identity_lock do
+          state = endpoint_state
+          next unless state.key?("last_error_code") || state.key?("last_error_at")
 
-        state.delete("last_error_code")
-        state.delete("last_error_at")
-        save_endpoint_state(state)
+          state.delete("last_error_code")
+          state.delete("last_error_at")
+          save_endpoint_state(state)
+        end
       end
 
       def handle_failure(operation, error)
@@ -562,10 +687,12 @@ module ForumFortress
       end
 
       def remember_error(error)
-        state = endpoint_state
-        state["last_error_code"] = error_code(error)
-        state["last_error_at"] = now
-        save_endpoint_state(state)
+        with_identity_lock do
+          state = endpoint_state
+          state["last_error_code"] = error_code(error)
+          state["last_error_at"] = now
+          save_endpoint_state(state)
+        end
       end
 
       def log_failure(operation, error)
@@ -601,6 +728,19 @@ module ForumFortress
         nil
       end
 
+      def with_identity_lock
+        key = "forum_fortress:identity:#{domain}"
+        if defined?(DistributedMutex)
+          DistributedMutex.synchronize(key, validity: IDENTITY_LOCK_VALIDITY_SECONDS) { yield }
+        else
+          mutex =
+            self.class.fallback_mutexes_guard.synchronize do
+              self.class.fallback_mutexes[key] ||= Mutex.new
+            end
+          mutex.synchronize { yield }
+        end
+      end
+
       def write_if_changed(name, value)
         return if read(name, nil).to_s == value.to_s
 
@@ -609,9 +749,15 @@ module ForumFortress
 
       def safe_endpoint(value)
         value = value.to_s.strip.chomp("/")
-        return nil unless (API_BASE_URLS.values + [CONTROL_BASE_URL]).include?(value)
+        return nil if value.empty?
+
+        uri = URI.parse(value)
+        return nil unless uri.is_a?(URI::HTTPS) && !uri.host.to_s.empty?
+        return nil if uri.user || uri.password || uri.query || uri.fragment
 
         value
+      rescue URI::InvalidURIError
+        nil
       end
 
       def now
