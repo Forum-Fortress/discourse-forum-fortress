@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1 - 2026-09-28
+
+- Apply the upstream Syntax Tree format to the API client for green public CI.
+- Keep runtime behaviour unchanged from 1.0.
+
 ## 1.0 - 2026-09-25
 
 - First stable release of the Discourse plugin.

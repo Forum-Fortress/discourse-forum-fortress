@@ -4,7 +4,7 @@
 
 Forum Fortress is a native Discourse plugin that checks selected user-generated activity against the Forum Fortress anti-spam service. This repository contains the first Discourse implementation and is intended to be installed as a normal Discourse plugin.
 
-> **Release status:** Stable release; current stable version **1.0**. Install on a current, backed-up Discourse site and validate the protected flows before relying on it in production.
+> **Release status:** Stable release; current stable version **1.0.1**. Install on a current, backed-up Discourse site and validate the protected flows before relying on it in production.
 
 ## Current coverage
 

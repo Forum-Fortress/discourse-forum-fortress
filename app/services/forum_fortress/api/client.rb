@@ -16,7 +16,7 @@ module ForumFortress
     end
 
     class Client
-      PLUGIN_VERSION = "1.0"
+      PLUGIN_VERSION = "1.0.1"
       PLATFORM = "discourse"
       CONTROL_BASE_URL = "https://api.ffapi.net"
       API_BASE_URLS = {
@@ -207,12 +207,17 @@ module ForumFortress
 
         return with_identity_lock { site_status(lock: false) } if lock
 
-        status, endpoint = get_across_candidates(
-          "/v1/site/status",
-          query: { domain: domain },
-          headers: { "X-FF-Key" => api_key },
-          timeout: [timeout_budget, 2].min,
-        )
+        status, endpoint =
+          get_across_candidates(
+            "/v1/site/status",
+            query: {
+              domain: domain,
+            },
+            headers: {
+              "X-FF-Key" => api_key,
+            },
+            timeout: [timeout_budget, 2].min,
+          )
         if status["site_id"].to_s.strip.empty?
           raise RequestError.new("invalid site status", code: "invalid_site_status")
         end
@@ -235,7 +240,14 @@ module ForumFortress
           state = endpoint_state
           last_attempt = state["heartbeat_last_attempt_at"].to_i
           plan = state["plan_name"].to_s.downcase
-          interval = %w[pro multimod].include?(plan) ? PRO_HEARTBEAT_INTERVAL_SECONDS : STANDARD_HEARTBEAT_INTERVAL_SECONDS
+          interval =
+            (
+              if %w[pro multimod].include?(plan)
+                PRO_HEARTBEAT_INTERVAL_SECONDS
+              else
+                STANDARD_HEARTBEAT_INTERVAL_SECONDS
+              end
+            )
           return nil if !force && last_attempt.positive? && now - last_attempt < interval
           with_identity_lock do
             state = endpoint_state
@@ -243,11 +255,12 @@ module ForumFortress
             best_effort_state_update("heartbeat_attempt") { save_endpoint_state(state) }
           end
 
-          response, endpoint = post_across_candidates(
-            "/v1/site/ping",
-            common_payload,
-            timeout: [timeout_budget, 3].min,
-          )
+          response, endpoint =
+            post_across_candidates(
+              "/v1/site/ping",
+              common_payload,
+              timeout: [timeout_budget, 3].min,
+            )
           best_effort_state_update("heartbeat_identity") { persist_identity(response, endpoint:) }
           best_effort_state_update("heartbeat_success") do
             with_identity_lock do
@@ -321,12 +334,7 @@ module ForumFortress
         { ok: !heartbeat_response.nil?, health: !heartbeat_response.nil?, site_status: true }
       rescue StandardError => error
         best_effort_state_update("connection_test_failure") { remember_error(error) }
-        {
-          ok: false,
-          health: false,
-          site_status: false,
-          error_code: error_code(error),
-        }
+        { ok: false, health: false, site_status: false, error_code: error_code(error) }
       end
 
       def portal_launch
@@ -335,11 +343,12 @@ module ForumFortress
         rebootstrap_attempted = false
         begin
           bootstrap_if_needed
-          response, = post_across_candidates(
-            "/v1/site/portal",
-            common_payload,
-            timeout: [timeout_budget, 3].min,
-          )
+          response, =
+            post_across_candidates(
+              "/v1/site/portal",
+              common_payload,
+              timeout: [timeout_budget, 3].min,
+            )
           best_effort_state_update("clear_error") { clear_error }
           response
         rescue RequestError => error
@@ -369,11 +378,12 @@ module ForumFortress
 
         return { "status" => "no_identity" } if api_key.empty? || site_id.empty?
 
-        response, = post_across_candidates(
-          "/v1/site/deprovision",
-          common_payload.merge("reason" => normalized_reason),
-          timeout: [timeout_budget, 3].min,
-        )
+        response, =
+          post_across_candidates(
+            "/v1/site/deprovision",
+            common_payload.merge("reason" => normalized_reason),
+            timeout: [timeout_budget, 3].min,
+          )
         response
       rescue RequestError => error
         if error.status == 410 && error.code == "site_not_found"
@@ -395,7 +405,7 @@ module ForumFortress
         last_error = nil
         check_candidates.each do |base|
           begin
-            return [@transport.post_json(base, path, payload, timeout:), base]
+            return @transport.post_json(base, path, payload, timeout:), base
           rescue StandardError => error
             last_error = error
             raise unless retryable_request_error?(error)
@@ -408,7 +418,7 @@ module ForumFortress
         last_error = nil
         check_candidates.each do |base|
           begin
-            return [@transport.get_json(base, path, query:, headers:, timeout:), base]
+            return @transport.get_json(base, path, query:, headers:, timeout:), base
           rescue StandardError => error
             last_error = error
             raise unless retryable_request_error?(error)
@@ -505,7 +515,8 @@ module ForumFortress
 
       def offline_rebootstrap_candidates
         state = endpoint_state
-        fallback = Array(state["fallback_bootstrap_endpoints"]).filter_map { |value| safe_endpoint(value) }
+        fallback =
+          Array(state["fallback_bootstrap_endpoints"]).filter_map { |value| safe_endpoint(value) }
         configured = API_BASE_URLS.fetch(region, API_BASE_URLS["global"])
         (fallback + [configured, CONTROL_BASE_URL]).compact.uniq
       end
@@ -542,7 +553,8 @@ module ForumFortress
         return true if [408, 425, 500, 502, 503, 504].include?(status)
         return true if allow_node_mismatch && status == 403 && error.code.to_s == "node_mismatch"
 
-        status.zero? && %w[timeout dns_or_socket_error tls_error transport_error].include?(error.code.to_s)
+        status.zero? &&
+          %w[timeout dns_or_socket_error tls_error transport_error].include?(error.code.to_s)
       end
 
       def stale_identity_error?(error)
@@ -595,7 +607,9 @@ module ForumFortress
         # token reached the wrong edge. Keep the token and its offline site
         # metadata so the forced bootstrap can try the advertised fallback
         # issuers and reconcile it when control is reachable.
-        return if offline_bootstrap_key? && error.respond_to?(:code) && error.code.to_s == "node_mismatch"
+        if offline_bootstrap_key? && error.respond_to?(:code) && error.code.to_s == "node_mismatch"
+          return
+        end
 
         clear_site_identity
         return if error.respond_to?(:code) && error.code.to_s.downcase == "stale_site"
@@ -628,10 +642,11 @@ module ForumFortress
             state["offline_preferred_endpoint"] = candidate
             state["issuer_node_id"] = response["issuer_node_id"].to_s.strip
             state["offline_canonical_domain"] = response["canonical_domain"].to_s.strip
-            state["offline_rebootstrap_at"] =
-              now + [response["rebootstrap_after_seconds"].to_i, 60].max
-            state["fallback_bootstrap_endpoints"] =
-              Array(response["fallback_bootstrap_endpoints"]).filter_map { |value| safe_endpoint(value) }
+            state["offline_rebootstrap_at"] = now +
+              [response["rebootstrap_after_seconds"].to_i, 60].max
+            state["fallback_bootstrap_endpoints"] = Array(
+              response["fallback_bootstrap_endpoints"],
+            ).filter_map { |value| safe_endpoint(value) }
             state["key_type"] = "offline_bootstrap"
             best_effort_state_update("preferred_endpoint") do
               write_if_changed(:forum_fortress_preferred_endpoint, candidate)
