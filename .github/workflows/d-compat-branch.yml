@@ -10,4 +10,4 @@ permissions:
 
 jobs:
   ci:
-    uses: discourse/.github/.github/workflows/create-d-compat-branch.yml@v1
+    uses: discourse/.github/.github/workflows/create-d-compat-branch.yml@bee9ee78c8e6fd574a8496f415e08c6eb412d3df # v1

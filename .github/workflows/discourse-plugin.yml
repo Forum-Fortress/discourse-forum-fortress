@@ -9,6 +9,6 @@ on:
 
 jobs:
   ci:
-    uses: discourse/.github/.github/workflows/discourse-plugin.yml@v1
+    uses: discourse/.github/.github/workflows/discourse-plugin.yml@bee9ee78c8e6fd574a8496f415e08c6eb412d3df # v1
     with:
       name: discourse-forum-fortress
