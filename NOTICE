@@ -19,3 +19,7 @@ GPL, including lawful descriptive or nominative use.
 
 Portions may be copyright their respective contributors and third parties.
 Third-party components retain their own copyright and licence notices.
+
+The development lint toolchain includes a local security backport of braces
+3.0.3, Copyright (c) 2014-present Jon Schlinkert, under the MIT licence.
+See lib/braces-backport/LICENSE and SECURITY_BACKPORT.md in that directory.

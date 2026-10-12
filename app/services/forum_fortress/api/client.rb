@@ -16,7 +16,7 @@ module ForumFortress
     end
 
     class Client
-      PLUGIN_VERSION = "1.0.1"
+      PLUGIN_VERSION = "1.0.2"
       PLATFORM = "discourse"
       CONTROL_BASE_URL = "https://api.ffapi.net"
       API_BASE_URLS = {

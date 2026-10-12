@@ -14,7 +14,8 @@
     "lint:css": "pnpm stylelint 'assets/stylesheets/**/*.scss' --allow-empty-input",
     "lint:js": "eslint {assets,admin/assets,test}/javascripts --cache --no-error-on-unmatched-pattern",
     "lint:prettier": "pnpm prettier 'assets/stylesheets/**/*.scss' '{assets,admin/assets,test}/javascripts/**/*.{js,gjs,ts,gts,mts,cts}' --check --no-error-on-unmatched-pattern",
-    "lint:types": "ember-tsc -b"
+    "lint:types": "ember-tsc -b",
+    "lint:dependencies": "node -e \"if (process.env.FF_PRIVATE_PLUGIN_CI === '1') require('node:child_process').execFileSync(process.execPath, ['--test', 'test/dependency-backports.cjs'], {stdio: 'inherit'})\""
   },
   "engines": {
     "node": ">= 22",
@@ -22,5 +23,13 @@
     "yarn": "please-use-pnpm",
     "pnpm": "^10"
   },
-  "packageManager": "pnpm@10.28.0"
+  "packageManager": "pnpm@10.28.0",
+  "pnpm": {
+    "overrides": {
+      "braces": "file:lib/braces-backport",
+      "shell-quote": "^1.11.0",
+      "source-map-js": "^1.2.2",
+      "postcss-selector-parser": "^7.1.6"
+    }
+  }
 }

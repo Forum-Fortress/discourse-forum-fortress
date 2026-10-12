@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.2 - 2026-10-12
+
+- Add optional, default-off native seven-day suspension after two independent
+  high-confidence spam BLOCKs within 24 hours.
+- Background job rechecks local settings and account eligibility, using local
+  Redis deduplication and safe actor attribution.
+- Existing site identities, routing and BLOCK decisions are unchanged.
+  Account deletion and content purging remain out of scope.
+
 ## 1.0.1 - 2026-09-28
 
 - Apply the upstream Syntax Tree format to the API client for green public CI.

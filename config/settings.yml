@@ -34,6 +34,13 @@ forum_fortress:
   forum_fortress_fail_open:
     default: true
     client: true
+  forum_fortress_repeat_offender_action:
+    default: "off"
+    type: enum
+    choices:
+      - "off"
+      - "suspend"
+    client: false
   forum_fortress_preferred_endpoint:
     default: ""
     client: false

@@ -22,7 +22,7 @@ module ForumFortress
         fields = {}
         fields["username"] = user.username.to_s if changed?(user, :username)
         fields["name"] = user.name.to_s if changed?(user, :name)
-        enforce(user, "profile_edit") { @builder.profile(user, fields:) }
+        enforce(user, "profile_edit", actor: (actor.id == user.id ? actor : nil)) { @builder.profile(user, fields:) }
       end
     end
 
@@ -39,7 +39,7 @@ module ForumFortress
       fields = {}
       fields["bio"] = profile.bio_raw.to_s if changed?(profile, :bio_raw)
       fields["website"] = profile.website.to_s if changed?(profile, :website)
-      enforce(profile, "profile_edit") { @builder.profile(user, fields:) }
+      enforce(profile, "profile_edit", actor: (actor.id == user.id ? actor : nil)) { @builder.profile(user, fields:) }
     end
 
     def validate_new_post(manager)
@@ -54,7 +54,7 @@ module ForumFortress
       return unless @eligibility.new_post?(manager)
 
       event = nonblank?(args[:topic_id]) ? "reply" : "topic"
-      outcome = outcome_for(event) { @builder.new_post(manager) }
+      outcome = outcome_for(event, actor: user) { @builder.new_post(manager) }
       return if outcome == :allow
 
       new_post_result(outcome)
@@ -70,7 +70,7 @@ module ForumFortress
       return unless eligible_edit?(post.topic, post_id: post.id)
 
       event = post.post_number.to_i == 1 ? "topic_edit" : "reply_edit"
-      outcome = outcome_for(event) { @builder.post_edit(post, actor:) }
+      outcome = outcome_for(event, actor: (actor.id == post.user_id ? actor : nil)) { @builder.post_edit(post, actor:) }
       add_error(post, outcome)
     end
 
@@ -85,16 +85,27 @@ module ForumFortress
       return unless first_post
       return unless eligible_edit?(topic, post_id: first_post.id)
 
-      outcome = outcome_for("topic_edit") { @builder.topic_edit(topic, first_post, actor:) }
+      outcome = outcome_for("topic_edit", actor: (actor.id == topic.user_id ? actor : nil)) { @builder.topic_edit(topic, first_post, actor:) }
       add_error(topic, outcome)
     end
 
     private
 
-    def check(event, payload)
+    def check(event, payload, actor: nil)
       response = @client.check(event, payload)
       return :allow if response.nil? || Api::Decision.allowed?(response)
-      return :block if Api::Decision.blocked?(response)
+      if Api::Decision.blocked?(response)
+        if actor && response.is_a?(Hash) &&
+             (response["escalation_eligible"] || response[:escalation_eligible]) == true
+          begin
+            RepeatOffenders.record(user: actor, response: response)
+          rescue StandardError => error
+            # Account-action failures must NEVER change a BLOCK into ALLOW.
+            Rails.logger.warn("Forum Fortress optional account action skipped: #{error.class}")
+          end
+        end
+        return :block
+      end
 
       :unavailable
     rescue Api::Unavailable
@@ -103,14 +114,14 @@ module ForumFortress
       @client.respond_to?(:fail_open?) && !@client.fail_open? ? :unavailable : :allow
     end
 
-    def outcome_for(event)
-      check(event, yield)
+    def outcome_for(event, actor: nil)
+      check(event, yield, actor: actor)
     rescue StandardError
       fail_open? ? :allow : :unavailable
     end
 
-    def enforce(record, event, &block)
-      add_error(record, outcome_for(event, &block))
+    def enforce(record, event, actor: nil, &block)
+      add_error(record, outcome_for(event, actor: actor, &block))
     end
 
     def add_error(record, outcome)

@@ -4,7 +4,7 @@
 
 Forum Fortress is a native Discourse plugin that checks selected user-generated activity against the Forum Fortress anti-spam service. This repository contains the first Discourse implementation and is intended to be installed as a normal Discourse plugin.
 
-> **Release status:** Stable release; current stable version **1.0.1**. Install on a current, backed-up Discourse site and validate the protected flows before relying on it in production.
+> **Release status:** Stable release; current stable version **1.0.2**. Install on a current, backed-up Discourse site and validate the protected flows before relying on it in production.
 
 ## Current coverage
 
@@ -87,6 +87,29 @@ After installation, open **Admin → Plugins → Forum Fortress → Dashboard**,
 6. Use **Open Forum Fortress portal** for an admin-only, short-lived portal login. Discourse requests the launch URL server-side and only redirects to validated Forum Fortress HTTPS hosts.
 
 The site ID and endpoint state are hidden server-side settings maintained by the plugin. The legacy preferred-endpoint setting is retained only for offline issuer pinning; normal requests always start at the selected GeoDNS hostname. No API key is serialized to browser settings or exposed to frontend JavaScript.
+
+## Optional repeat-offender suspension
+
+In **Discourse site settings > Plugins > Forum Fortress**, the **Repeat
+offender action** defaults to **off** for all new and upgraded installations.
+Select **suspend** to enable a reversible seven-day Discourse suspension for
+newly registered local members after two independent, confirmed high-confidence
+BLOCK actions scoring above 80 inside 24 hours.
+
+The service exposes only an optional `escalation_eligible: true` boolean; it
+does not expose scoring internals or receive local forum user IDs. Older
+services, normal blocks, policy-only/low-confidence decisions, failures,
+registrations and guests cannot trigger this action. Discourse counts
+independent, stable decision references using atomic Redis keys expiring
+after 24 hours, then queues a native background job. The worker rechecks
+local settings, staff/system exemptions, member age (seven days or younger)
+and post count (ten or fewer) before suspension. Moderators editing another
+member's content never cause that member to be suspended. There are no extra
+API calls or changes to signup, normal checks or existing credentials.
+
+Automatic content removal and permanent account deletion are deliberately
+not included in this reversible first phase. An administrator can lift a
+suspension through Discourse's normal moderation interface.
 
 ## API and failure behaviour
 
