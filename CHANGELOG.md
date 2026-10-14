@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.0.4 - 2026-10-14
+
+- Require three cleanup-certified BLOCKs within 24 hours and five or fewer
+  actual forum posts in cleanup mode, including topic starters and restricted
+  categories but excluding private messages and whispers; preserve the
+  two-event, ten-post suspension-only mode.
+- Keep cleanup evidence separate from suspension-only evidence.
+- Repair the native topic query and exclude restricted categories, whispers,
+  private messages, topic starters and other authors from reply cleanup.
+- Commit native suspension/deletion and their durable receipts together; bind
+  cleanup to the recorded native suspension timestamps, expiry, actor and staff
+  history identity. Preserve moderator replacements and restored posts, and
+  refuse cleanup based on legacy receipts without native ban identity.
+- Lock and recheck the native account row before suspension and each deletion.
+- Verify actual Discourse 2026.9.0 with 130 private RSpec examples, public 1.0.2
+  upgrades preserving identity and selected ban-only mode, native uninstall,
+  real Sidekiq queue and concurrent workers, rollback and moderator restoration.
+
+## 1.0.3 - Unreleased (included in 1.0.4)
+
+- Add an opt-in action to suspend a confirmed repeat spammer and soft-delete
+  only their existing public replies through Discourse's native moderator
+  service. Topic first posts, private messages, and other users' content are
+  preserved; native staff logs and restore controls remain available.
+- Keep the existing suspension-only setting unchanged for upgraded sites and
+  keep new installations Off. Persist separate suspension, evidence, and
+  cleanup receipts so interrupted cleanup can resume without repeating a ban.
+
 ## 1.0.2 - 2026-10-12
 
 - Add optional, default-off native seven-day suspension after two independent

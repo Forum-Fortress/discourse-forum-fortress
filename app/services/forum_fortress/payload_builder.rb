@@ -103,12 +103,21 @@ module ForumFortress
         "username" => attribute(user, :username).to_s,
         "email" => attribute(user, :email).to_s,
         "account_age_seconds" => age,
-        "post_count" => new_record?(user) ? 0 : attribute(user, :post_count).to_i,
+        "post_count" => local_post_count(user),
       }
 
       payload
         .merge(extra)
         .reject { |_key, value| value.nil? || (value.respond_to?(:empty?) && value.empty?) }
+    end
+
+    def local_post_count(user)
+      return 0 if new_record?(user)
+      unless SiteSetting.forum_fortress_repeat_offender_action == "suspend_and_clean"
+        return attribute(user, :post_count).to_i
+      end
+
+      RepeatOffenders.cleanup_post_count(user)
     end
 
     def profile_fields(user, profile = nil)

@@ -96,9 +96,10 @@ module ForumFortress
       return :allow if response.nil? || Api::Decision.allowed?(response)
       if Api::Decision.blocked?(response)
         if actor && response.is_a?(Hash) &&
-             (response["escalation_eligible"] || response[:escalation_eligible]) == true
+             ((response["escalation_eligible"] || response[:escalation_eligible]) == true ||
+              (response["repeat_cleanup_eligible"] || response[:repeat_cleanup_eligible]) == true)
           begin
-            RepeatOffenders.record(user: actor, response: response)
+            RepeatOffenders.record(user: actor, response: response, content: payload["content"] || payload[:content] || "")
           rescue StandardError => error
             # Account-action failures must NEVER change a BLOCK into ALLOW.
             Rails.logger.warn("Forum Fortress optional account action skipped: #{error.class}")

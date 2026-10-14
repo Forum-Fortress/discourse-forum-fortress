@@ -4,6 +4,7 @@ module ForumFortress
   class Uninstaller
     SETTING_NAMES = %i[
       forum_fortress_enabled
+      forum_fortress_repeat_offender_action
       forum_fortress_api_key
       forum_fortress_bootstrap_token
       forum_fortress_site_id

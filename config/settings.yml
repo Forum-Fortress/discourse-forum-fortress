@@ -40,6 +40,7 @@ forum_fortress:
     choices:
       - "off"
       - "suspend"
+      - "suspend_and_clean"
     client: false
   forum_fortress_preferred_endpoint:
     default: ""

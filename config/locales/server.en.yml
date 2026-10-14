@@ -8,6 +8,7 @@ en:
     forum_fortress_allow_global_fallback: "Allow Forum Fortress checks to fall back to the global API endpoint when the selected region is unavailable."
     forum_fortress_timeout: "Maximum total time in seconds to spend trying Forum Fortress check endpoints. Individual attempts remain bounded."
     forum_fortress_fail_open: "Allow protected actions when Forum Fortress cannot be reached."
+    forum_fortress_repeat_offender_action: "Choose whether confirmed repeat spammers are suspended only or have eligible public replies removed too. Cleanup uses reversible native Discourse post deletion."
     forum_fortress_preferred_endpoint: "Forum Fortress offline issuer endpoint (legacy compatibility)."
     forum_fortress_endpoint_state: "Forum Fortress endpoint state (managed automatically)."
 

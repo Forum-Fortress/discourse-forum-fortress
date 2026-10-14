@@ -4,7 +4,7 @@
 
 Forum Fortress is a native Discourse plugin that checks selected user-generated activity against the Forum Fortress anti-spam service. This repository contains the first Discourse implementation and is intended to be installed as a normal Discourse plugin.
 
-> **Release status:** Stable release; current stable version **1.0.2**. Install on a current, backed-up Discourse site and validate the protected flows before relying on it in production.
+> This is the current stable version **1.0.4**.
 
 ## Current coverage
 
@@ -88,28 +88,47 @@ After installation, open **Admin → Plugins → Forum Fortress → Dashboard**,
 
 The site ID and endpoint state are hidden server-side settings maintained by the plugin. The legacy preferred-endpoint setting is retained only for offline issuer pinning; normal requests always start at the selected GeoDNS hostname. No API key is serialized to browser settings or exposed to frontend JavaScript.
 
-## Optional repeat-offender suspension
+## Optional repeat-offender enforcement and cleanup
 
 In **Discourse site settings > Plugins > Forum Fortress**, the **Repeat
-offender action** defaults to **off** for all new and upgraded installations.
-Select **suspend** to enable a reversible seven-day Discourse suspension for
-newly registered local members after two independent, confirmed high-confidence
-BLOCK actions scoring above 80 inside 24 hours.
+offender action** defaults to **off**. Upgrading never automatically enables
+cleanup; any previously selected ban-only mode is preserved.
+Select **suspend** to retain the existing reversible seven-day Discourse
+suspension, or select **suspend_and_clean** to also remove eligible existing
+public replies authored by that member. Both options remain opt-in and use
+separate service-certified eligibility gates.
 
-The service exposes only an optional `escalation_eligible: true` boolean; it
-does not expose scoring internals or receive local forum user IDs. Older
-services, normal blocks, policy-only/low-confidence decisions, failures,
-registrations and guests cannot trigger this action. Discourse counts
-independent, stable decision references using atomic Redis keys expiring
-after 24 hours, then queues a native background job. The worker rechecks
-local settings, staff/system exemptions, member age (seven days or younger)
-and post count (ten or fewer) before suspension. Moderators editing another
-member's content never cause that member to be suspended. There are no extra
-API calls or changes to signup, normal checks or existing credentials.
+The service exposes optional boolean eligibility advisories without scoring
+internals or local forum user IDs. **suspend** retains the existing threshold:
+two independent `escalation_eligible: true` blocks in 24 hours and at most ten
+posts. **suspend_and_clean** requires three independent
+`repeat_cleanup_eligible: true` blocks in 24 hours (original score at least 80)
+and at most five actual forum posts, counting topic starters and regular
+replies in public and restricted categories. Private messages and whispers are
+excluded from that count. Cleanup evidence uses its own event set, so switching
+modes cannot reuse earlier ban-only events. Older services, policy-only blocks,
+failures, registrations and guests cannot trigger the action. A native job
+rechecks local settings, staff/system exemptions, member age, and post count.
+A successful suspension and cleanup have separate durable receipts, so failed
+cleanup can retry without applying the ban again. A moderator reversal prevents
+stale work from re-banning or re-cleaning the member. Existing moderator
+suspensions take precedence. Cleanup requires the same native suspension
+timestamps and expiry, acting user and staff-history record captured in the
+Forum Fortress receipt. A moderator replacement stops cleanup; older receipts
+without this identity cannot authorize cleanup of an existing suspension.
+Suspension and its receipt, and each native
+deletion and its receipt, are committed together in database transactions.
+There are no extra API
+calls or changes to signup, normal checks or existing credentials.
 
-Automatic content removal and permanent account deletion are deliberately
-not included in this reversible first phase. An administrator can lift a
-suspension through Discourse's normal moderation interface.
+Cleanup calls Discourse's native `PostDestroyer`, which soft-deletes posts and
+records staff moderation history; moderators can restore them through the
+normal Discourse interface. It processes only regular public replies written
+by the offender, in a bounded batch of at most five. It excludes topic first
+posts, private messages, whispers, access-restricted categories, profile fields
+and content authored by anyone else. Skipping first posts prevents a reply cleanup from removing an
+entire discussion that includes legitimate members. Permanent account or
+content deletion is not part of this feature.
 
 ## API and failure behaviour
 
@@ -131,7 +150,18 @@ Back up the site and run `./launcher rebuild app`; the normal rebuild process fe
 
 Public GitHub Actions uses the standard Discourse plugin workflow. It runs the repository's JavaScript, stylesheet, type, Ruby and formatting checks, then installs the plugin against current Discourse core to validate database creation and migrations, Zeitwerk eager loading and reloading, and boot compatibility. Comprehensive behavioural, security and service-integration regression tests remain private and are not represented by the public CI badge. Because this repository does not publish those RSpec or QUnit suites, those workflow stages are skipped.
 
-## Known first-release limitations
+Release validation also runs private tests on actual Discourse **2026.9.0**
+with PostgreSQL and Redis. Version 1.0.4 passed 130 native RSpec examples,
+including the three-event/five-post cleanup gate, protected users and content,
+separate enforcement modes, tenant isolation, restoration history and receipt
+rollback/retry. A separate native lifecycle run verified installation and
+upgrade from public 1.0.2 with identity and content preserved and cleanup Off,
+preservation of a previously selected ban-only mode, the real Sidekiq queue,
+three concurrent workers, idempotency, moderator
+restoration and suspension reversal, and the native uninstall task. These
+private release checks are separate from the public CI badge.
+
+## Known limitations
 
 - No private-message checks, signature checks, moderation-queue synchronization, or post-creation telemetry reports.
 - Staged-user and automated/system flows are intentionally excluded and need a real site review if a deployment wants different policy.
