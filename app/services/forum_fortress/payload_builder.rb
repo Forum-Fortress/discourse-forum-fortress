@@ -21,6 +21,9 @@ module ForumFortress
             nonblank(attribute(user, :ip_address)),
         "content" => bounded(fields.values.join("\n")),
         "profile_fields" => fields,
+        "user_agent" => if defined?(RequestStore)
+          RequestStore.store[:forum_fortress_registration_user_agent]
+        end,
       )
     end
 

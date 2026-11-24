@@ -4,7 +4,7 @@
 
 # name: discourse-forum-fortress
 # about: Forum Fortress anti-spam protection for Discourse
-# version: 1.0.4
+# version: 1.0.5
 # authors: Forum Fortress
 # url: https://github.com/Forum-Fortress/discourse-forum-fortress
 # required_version: 2026.8.0
@@ -24,6 +24,7 @@ end
 require_relative "lib/forum_fortress/engine"
 
 after_initialize do
+  reloadable_patch { ::ApplicationController.prepend(ForumFortress::RegistrationRequestContext) }
   reloadable_patch { ::PostRevisor.prepend(ForumFortress::PostRevisorExtension) }
   reloadable_patch do
     formatter = ::SiteSettings::LabelFormatter.singleton_class

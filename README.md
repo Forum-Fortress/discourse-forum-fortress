@@ -4,7 +4,7 @@
 
 Forum Fortress is a native Discourse plugin that checks selected user-generated activity against the Forum Fortress anti-spam service. This repository contains the first Discourse implementation and is intended to be installed as a normal Discourse plugin.
 
-> This is the current stable version **1.0.4**.
+> This is version **1.0.5**.
 
 ## Current coverage
 
@@ -150,16 +150,13 @@ Back up the site and run `./launcher rebuild app`; the normal rebuild process fe
 
 Public GitHub Actions uses the standard Discourse plugin workflow. It runs the repository's JavaScript, stylesheet, type, Ruby and formatting checks, then installs the plugin against current Discourse core to validate database creation and migrations, Zeitwerk eager loading and reloading, and boot compatibility. Comprehensive behavioural, security and service-integration regression tests remain private and are not represented by the public CI badge. Because this repository does not publish those RSpec or QUnit suites, those workflow stages are skipped.
 
-Release validation also runs private tests on actual Discourse **2026.9.0**
-with PostgreSQL and Redis. Version 1.0.4 passed 130 native RSpec examples,
-including the three-event/five-post cleanup gate, protected users and content,
-separate enforcement modes, tenant isolation, restoration history and receipt
-rollback/retry. A separate native lifecycle run verified installation and
-upgrade from public 1.0.2 with identity and content preserved and cleanup Off,
-preservation of a previously selected ban-only mode, the real Sidekiq queue,
-three concurrent workers, idempotency, moderator
-restoration and suspension reversal, and the native uninstall task. These
-private release checks are separate from the public CI badge.
+Version 1.0.5 was tested on Discourse **2026.10.2** with PostgreSQL and Redis.
+The native tests covered repeated signup validation, protected users and
+content, separate enforcement modes, tenant isolation, restoration history,
+and receipt rollback and retry. The upgrade from public 1.0.4 preserved site
+identity, content and the selected repeat-offender setting. The lifecycle
+tests also exercised concurrent Sidekiq workers, moderator restoration,
+suspension reversal and native uninstall.
 
 ## Known limitations
 

@@ -15,7 +15,7 @@ module ForumFortress
       return if ignored_user?(user) || (actor && ignored_user?(actor))
 
       if user.new_record?
-        enforce(user, "register") { @builder.registration(user) }
+        add_error(user, registration_outcome(user))
       elsif changed?(user, :username) || changed?(user, :name)
         return unless actor
 
@@ -90,6 +90,18 @@ module ForumFortress
     end
 
     private
+
+    def registration_outcome(user)
+      payload = @builder.registration(user)
+      previous = user.instance_variable_get(:@forum_fortress_registration_check)
+      return previous[:outcome] if previous && previous[:payload] == payload
+
+      outcome = check("register", payload)
+      user.instance_variable_set(:@forum_fortress_registration_check, { payload:, outcome: })
+      outcome
+    rescue StandardError
+      fail_open? ? :allow : :unavailable
+    end
 
     def check(event, payload, actor: nil)
       response = @client.check(event, payload)

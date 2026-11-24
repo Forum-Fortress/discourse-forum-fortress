@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.5 - 2026-11-24
+
+- Reuse one registration decision when Discourse validates the same account and signup details again. Changes to signup details get a new check.
+- Keep the client user agent for registrations that start in native OAuth, SSO and invite flows.
+
 ## 1.0.4 - 2026-10-14
 
 - Require three cleanup-certified BLOCKs within 24 hours and five or fewer
