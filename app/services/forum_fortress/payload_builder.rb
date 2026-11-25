@@ -14,11 +14,10 @@ module ForumFortress
 
     def registration(user)
       fields = profile_fields(user)
+      native_ip = nonblank(attribute(user, :registration_ip_address)) || nonblank(attribute(user, :ip_address))
       user_payload(
         user,
-        "ip" =>
-          nonblank(attribute(user, :registration_ip_address)) ||
-            nonblank(attribute(user, :ip_address)),
+        "ip" => current_request_ip(native_ip),
         "content" => bounded(fields.values.join("\n")),
         "profile_fields" => fields,
         "user_agent" => if defined?(RequestStore)
@@ -44,7 +43,7 @@ module ForumFortress
         "links" => external_links(content),
         "thread_id" => nonblank(args[:topic_id]),
         "action" => "create",
-        "ip" => nonblank(args[:ip_address]),
+        "ip" => current_request_ip(args[:ip_address]),
         "user_agent" => nonblank(args[:user_agent].to_s.byteslice(0, 500)),
       )
     end
@@ -64,6 +63,7 @@ module ForumFortress
         "content_id" => nonblank(attribute(post, :id)),
         "thread_id" => nonblank(attribute(post, :topic_id)),
         "action" => "edit",
+        "ip" => current_request_ip,
       )
     end
 
@@ -83,6 +83,7 @@ module ForumFortress
         "content_id" => nonblank(attribute(first_post, :id)),
         "thread_id" => nonblank(attribute(topic, :id)),
         "action" => "edit",
+        "ip" => current_request_ip,
       )
     end
 
@@ -95,6 +96,7 @@ module ForumFortress
         "content" => content,
         "links" => external_links(content),
         "profile_fields" => fields,
+        "ip" => current_request_ip,
       )
     end
 
@@ -160,6 +162,11 @@ module ForumFortress
     end
 
     private
+
+    def current_request_ip(native_ip = nil)
+      request = RequestStore.store[:forum_fortress_request] if defined?(RequestStore)
+      ClientIp.resolve(request, native_ip)
+    end
 
     def bounded(value)
       value.to_s.byteslice(0, MAX_CONTENT_BYTES).to_s.scrub

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.6 - 2026-11-25
+
+- Report the visitor IP automatically behind reverse proxies that forward it.
+- Include the current visitor IP on post and topic edits and profile changes.
+
 ## 1.0.5 - 2026-11-24
 
 - Reuse one registration decision when Discourse validates the same account and signup details again. Changes to signup details get a new check.

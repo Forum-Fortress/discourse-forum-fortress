@@ -4,7 +4,7 @@
 
 Forum Fortress is a native Discourse plugin that checks selected user-generated activity against the Forum Fortress anti-spam service. This repository contains the first Discourse implementation and is intended to be installed as a normal Discourse plugin.
 
-> This is version **1.0.5**.
+> This is version **1.0.6**.
 
 ## Current coverage
 
@@ -141,6 +141,8 @@ Protected actions wait synchronously for a decision before their Discourse save 
 Only fields already used by the Forum Fortress forum integrations are sent: the site domain and platform metadata; registration/profile identity fields (including username and email); account age and post count; request IP and user agent for new posts when Discourse supplies them; eligible submitted post content; and external links extracted from that content. Registration can include display name, bio, website, registration IP and email before the account is accepted. Profile checks include the account identity fields plus only the supported profile fields changed in that submission. Private-message content, content in access-restricted categories, arbitrary Discourse metadata, and rendered profile HTML are not sent.
 
 The plugin does not add application-log entries containing raw emails, IP addresses, user agents, post bodies, links, or API keys. The API key uses Discourse's ordinary server-only secret site-setting mechanism. Forum Fortress is an external service dependency; administrators should review [Privacy and network access](https://forumfortress.com/docs/privacy-network/) and the [Privacy Policy](https://forumfortress.com/privacy/) before enabling it.
+
+Forum Fortress keeps the public visitor IP supplied by Discourse. If Discourse sees a non-public or missing visitor IP and the connection comes from a non-public peer, it checks `X-Forwarded-For`, `Forwarded`, `X-Real-IP`, `CF-Connecting-IP` and `True-Client-IP` in that order. Configure the reverse proxy to set these headers or strip any values supplied by visitors.
 
 ## Updating and compatibility
 
