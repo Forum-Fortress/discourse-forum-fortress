@@ -1,8 +1,12 @@
-# Forum Fortress for Discourse
+# Forum Fortress anti-spam plugin for Discourse
 
-[![Discourse Plugin CI](https://github.com/Forum-Fortress/discourse-forum-fortress/actions/workflows/discourse-plugin.yml/badge.svg)](https://github.com/Forum-Fortress/discourse-forum-fortress/actions/workflows/discourse-plugin.yml)
+Forum Fortress helps Discourse admins catch spam registrations, topics, replies
+and profile changes through its hosted anti-spam service. Install it through the
+normal Discourse plugin setup.
 
-Forum Fortress is a native Discourse plugin that checks selected user-generated activity against the Forum Fortress anti-spam service. This repository contains the first Discourse implementation and is intended to be installed as a normal Discourse plugin.
+- [Discourse plugin releases and downloads](https://forumfortress.com/platforms/discourse/)
+- [Discourse installation guide](https://forumfortress.com/docs/install/discourse/)
+- [Contact Forum Fortress](https://forumfortress.com/support/#contact)
 
 > This is version **1.0.6**.
 
